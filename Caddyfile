@@ -1,0 +1,40 @@
+# The site on port 7000 demonstrates requiring Tailscale authentication, and
+# using the placeholder values on the Caddy user object in a go template files
+# (see index.html).
+:7000 {
+	root .
+	file_server
+	templates
+	route {
+		tailscale_auth
+	}
+
+}
+
+# The sites on port 7100 and 7101 demonstrate using Tailscale authentication
+# with a proxied application.  Port 7100 is the Caddy proxy which enforces
+# authentication, uses the Caddy user object to set various X-Webauth headers,
+# and then proxies the request to port 7101 which is the proxied application.
+:7100 {
+	route {
+		tailscale_auth
+	}
+
+	reverse_proxy http://localhost:7101 {
+		header_up X-Webauth-User {http.auth.user.tailscale_login}
+		header_up X-Webauth-Email {http.auth.user.tailscale_user}
+		header_up X-Webauth-Name {http.auth.user.tailscale_name}
+		header_up X-Webauth-Tailnet {http.auth.user.tailscale_tailnet}
+		header_up X-Webauth-Photo {http.auth.user.tailscale_profile_picture}
+	}
+}
+
+# The site on port 7101 is playing the role of a proxied application that
+# doesn't know anything about Tailscale, but can be configured for external
+# authentication in X-Webauth request headers.  Real world applications that
+# support this setup include Grafana and Gitea, among others.
+:7101 {
+	root .
+	file_server
+	templates
+}
