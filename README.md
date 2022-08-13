@@ -69,3 +69,10 @@ well as verbose logging:
       verbose
     }
 ```
+
+# Related work
+
+It looks like <https://github.com/astrophena/tsid> is very similar and did this
+in mid 2021, but hooks into caddy as an http handler rather than an
+authentication provider. It also doesn't support tsnet, which likely didn't
+exist at the time.
