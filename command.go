@@ -26,6 +26,7 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	caddycmd "github.com/caddyserver/caddy/v2/cmd"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+	"github.com/caddyserver/caddy/v2/modules/caddyhttp/caddyauth"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp/headers"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp/reverseproxy"
 	"github.com/caddyserver/caddy/v2/modules/caddytls"
@@ -33,15 +34,19 @@ import (
 
 func init() {
 	caddycmd.RegisterCommand(caddycmd.Command{
-		Name:  "reverse-proxy",
-		Func:  cmdReverseProxy,
+		Name:  "tailscale-proxy",
+		Func:  cmdTailscaleProxy,
 		Usage: "[--from <addr>] [--to <addr>] [--change-host-header]",
-		Short: "A quick and production-ready reverse proxy",
+		Short: "A quick reverse proxy with Tailscale authentication",
 		Long: `
-A simple but production-ready reverse proxy. Useful for quick deployments,
-demos, and development.
+A copy of caddy's standard production-ready reverse proxy with Tailscale
+authentication. Useful for quick deployments, demos, and development.
 
 Simply shuttles HTTP(S) traffic from the --from address to the --to address.
+
+Requests must be received over the Tailscale network interface.  Information
+about the authenticated Tailscale client are provided on the proxied request in
+X-Webauth-* headers.
 
 Unless otherwise specified in the addresses, the --from address will be
 assumed to be HTTPS if a hostname is given, and the --to address will be
@@ -56,7 +61,7 @@ from its original incoming value to the address of the upstream. (Otherwise, by
 default, all incoming headers are passed through unmodified.)
 `,
 		Flags: func() *flag.FlagSet {
-			fs := flag.NewFlagSet("reverse-proxy", flag.ExitOnError)
+			fs := flag.NewFlagSet("tailscale-proxy", flag.ExitOnError)
 			fs.String("from", "localhost", "Address on which to receive traffic")
 			fs.String("to", "", "Upstream address to which traffic should be sent")
 			fs.Bool("change-host-header", false, "Set upstream Host header to address of upstream")
@@ -67,7 +72,7 @@ default, all incoming headers are passed through unmodified.)
 	})
 }
 
-func cmdReverseProxy(fs caddycmd.Flags) (int, error) {
+func cmdTailscaleProxy(fs caddycmd.Flags) (int, error) {
 	caddy.TrapSignals()
 
 	from := fs.String("from")
@@ -124,16 +129,21 @@ func cmdReverseProxy(fs caddycmd.Flags) (int, error) {
 	handler := reverseproxy.Handler{
 		TransportRaw: caddyconfig.JSONModuleObject(ht, "protocol", "http", nil),
 		Upstreams:    reverseproxy.UpstreamPool{{Dial: toAddr}},
+		Headers: &headers.Handler{
+			Request: &headers.HeaderOps{
+				Set: http.Header{
+					"X-Webauth-Email":   []string{"{http.auth.user.tailscale_user}"},
+					"X-Webauth-Name":    []string{"{http.auth.user.tailscale_name}"},
+					"X-Webauth-Photo":   []string{"{http.auth.user.tailscale_profile_picture}"},
+					"X-Webauth-Tailnet": []string{"{http.auth.user.tailscale_tailnet}"},
+					"X-Webauth-User":    []string{"{http.auth.user.tailscale_login}"},
+				},
+			},
+		},
 	}
 
 	if changeHost {
-		handler.Headers = &headers.Handler{
-			Request: &headers.HeaderOps{
-				Set: http.Header{
-					"Host": []string{"{http.reverse_proxy.upstream.hostport}"},
-				},
-			},
-		}
+		handler.Headers.Request.Set["Host"] = []string{"{http.reverse_proxy.upstream.hostport}"}
 	}
 
 	route := caddyhttp.Route{
@@ -149,8 +159,19 @@ func cmdReverseProxy(fs caddycmd.Flags) (int, error) {
 		}
 	}
 
+	authHandler := caddyauth.Authentication{
+		ProvidersRaw: caddy.ModuleMap{
+			"tailscale": caddyconfig.JSON(TailscaleAuth{}, nil),
+		},
+	}
+	authRoute := caddyhttp.Route{
+		HandlersRaw: []json.RawMessage{
+			caddyconfig.JSONModuleObject(authHandler, "handler", "authentication", nil),
+		},
+	}
+
 	server := &caddyhttp.Server{
-		Routes: caddyhttp.RouteList{route},
+		Routes: caddyhttp.RouteList{authRoute, route},
 		Listen: []string{":" + fromAddr.Port},
 	}
 
