@@ -22,10 +22,8 @@ First, you'll need to install [xcaddy][] to build a caddy binary with custom mod
 Clone this repo and run `xcaddy run` to build and run a caddy server.
 
 **NOTE:** The first time you run it, you may be prompted for your password
-because caddy actually mucks with your system certificate store to [install a
-certificate authority] to sign development certificates.  This is pretty awful,
-but I've yet to find a good workaround.  I guess decide whether you want to
-proceed or not. :-\
+because caddy uses your system certificate store to [install a certificate
+authority] to sign development certificates.
 
 [install a certificate authority]: https://caddyserver.com/docs/automatic-https
 
@@ -36,7 +34,7 @@ http://yourhost:7100/ and you should see the same information in a little
 different format.  This demonstrates two different ways that the module can be
 used (see more details in [Caddyfile](./Caddyfile)).
 
-  1. port 7000 - authenticate as normal a populate the standard caddy user object
+  1. port 7000 - authenticate as normal and populate the standard caddy user object
   2. port 7100 - do the same, but populate X-Webauth headers and proxy the
      request to a separate application that knows nothing about Tailscale.
 
@@ -53,8 +51,8 @@ Specify an auth key to use tsnet mode:
       auth_key {env.TS_AUTH_KEY}
     }
 
-In order to use the environment variable, you'll need to actually build a caddy
-binary rather than just using `xcaddy run`.  To do that:
+In order to use the environment variable form, you'll need to actually build a
+caddy binary rather than just using `xcaddy run`.  To do that:
 
     xcaddy build --with github.com/tailscale/caddy=./
     TS_AUTH_KEY=ts-key-xxxxxxCNTRL-xxxxxx ./caddy run
@@ -69,6 +67,10 @@ well as verbose logging:
       verbose
     }
 ```
+
+tsnet mode still actually requires a local tailscaled running so that caddy can
+listen on the tailscale network interface.  We're looking into options to remove
+the need for tailscaled at all.
 
 # Related work
 
