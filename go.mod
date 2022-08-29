@@ -1,4 +1,4 @@
-module github.com/tailscale/caddy
+module github.com/tailscale/caddy-tailscale-auth
 
 go 1.19
 
