@@ -6,7 +6,9 @@ is written in Go anyway, what if we combined the two?
 This repo provides a Caddy module that will talk with a local tailscaled in
 exactly the same way that nginx-auth does, but without needing a separate
 binary.  Alternately, you can provide an auth_key and caddy will use tsnet to
-join your tailnet directly without needing tailscaled.
+join your tailnet directly and use that connection to authenticate users
+(though tailscaled is still necessary for now to listen on the tailscale
+interface).
 
 [nginx-auth]: https://github.com/tailscale/tailscale/tree/main/cmd/nginx-auth
 [with Caddy]: https://caddyserver.com/docs/caddyfile/directives/forward_auth#tailscale
