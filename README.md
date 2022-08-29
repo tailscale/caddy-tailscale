@@ -56,7 +56,7 @@ Specify an auth key to use tsnet mode:
 In order to use the environment variable, you'll need to actually build a caddy
 binary rather than just using `xcaddy run`.  To do that:
 
-    xcaddy build --with githib.com/tailscale/caddy=./
+    xcaddy build --with github.com/tailscale/caddy=./
     TS_AUTH_KEY=ts-key-xxxxxxCNTRL-xxxxxx ./caddy run
 
 When using tsnet mode, you can also specify a custom hostname for your node as
