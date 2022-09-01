@@ -1,9 +1,14 @@
-package tsauth
+package tscaddy
 
 import (
 	"fmt"
+	"log"
+	"net"
 	"net/http"
+	"os"
+	"path"
 	"strings"
+	"sync"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
@@ -15,18 +20,76 @@ import (
 	"tailscale.com/util/strs"
 )
 
+var (
+	// servers maps hostnames to tsnet servers. It is protected by mu.
+	servers = make(map[string]*tsnet.Server)
+	mu      = sync.RWMutex{}
+)
+
 func init() {
 	caddy.RegisterModule(TailscaleAuth{})
 	httpcaddyfile.RegisterHandlerDirective("tailscale_auth", parseCaddyfile)
+	caddy.RegisterNetwork("tailscale", getListener)
+}
+
+// getListener returns a tailscale net.Listener for Caddy apps to listen on. The specified
+// address will take the form of "tailscale/host:port" with host being optional.  If
+// specified, host will be provided to tsnet as the desired hostname for the tailscale
+// node.  Only one tsnet server is created per host, even if multiple ports are being
+// listened on for the host.
+//
+// Auth keys can be provided in environment variables of the form TS_AUTHKEY_<HOST>.  If
+// no host is specified in the address, the environment variable TS_AUTHKEY will be used.
+func getListener(_, addr string) (net.Listener, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	mu.Lock()
+	s, ok := servers[host]
+	if !ok {
+		s = &tsnet.Server{
+			Hostname: host,
+			Logf: func(format string, args ...any) {
+				// TODO: parse out and always log authURL so you don't need
+				// to turn on debug logging to get it.
+				if os.Getenv("TS_VERBOSE") == "1" {
+					log.Printf(format, args...)
+				}
+			},
+		}
+
+		if host != "" {
+			// Set authkey to "TS_AUTHKEY_<HOST>".  If empty,
+			// fall back to "TS_AUTHKEY".
+			s.AuthKey = os.Getenv("TS_AUTHKEY_" + strings.ToUpper(host))
+			if s.AuthKey == "" {
+				s.AuthKey = os.Getenv("TS_AUTHKEY")
+			}
+
+			// Set config directory for tsnet.  By default, tsnet will use the name of the
+			// running program, but we include the hostname as well so that a single
+			// caddy instance can have multiple tsnet servers.
+			configDir, err := os.UserConfigDir()
+			if err != nil {
+				return nil, err
+			}
+			s.Dir = path.Join(configDir, "tsnet-caddy-"+host)
+			if err := os.MkdirAll(s.Dir, 0700); err != nil {
+				return nil, err
+			}
+		}
+
+		servers[host] = s
+	}
+	defer mu.Unlock()
+
+	return s.Listen("tcp", ":"+port)
 }
 
 type TailscaleAuth struct {
-	AuthKey  string `json:"auth_key,omitempty"`
-	Hostname string `json:"hostname,omitempty"`
-	Verbose  bool   `json:"verbose,omitempty"`
-
-	server *tsnet.Server
-	client *tailscale.LocalClient
+	localclient *tailscale.LocalClient
 }
 
 func (TailscaleAuth) CaddyModule() caddy.ModuleInfo {
@@ -36,49 +99,56 @@ func (TailscaleAuth) CaddyModule() caddy.ModuleInfo {
 	}
 }
 
-func (ta *TailscaleAuth) Provision(ctx caddy.Context) error {
-	logger := ctx.Logger(ta).Sugar()
-	if ta.AuthKey != "" {
-		ta.server = &tsnet.Server{
-			Hostname: ta.Hostname,
-			Logf: func(format string, args ...any) {
-				if ta.Verbose {
-					logger.Infof(format, args...)
-				}
-			},
-			AuthKey: ta.AuthKey,
-		}
+// client returns the tailscale LocalClient for the TailscaleAuth module.  If the LocalClient
+// has not already been configured, the provided request will be used to set it up for the
+// appropriate tsnet server.
+func (ta *TailscaleAuth) client(r *http.Request) (*tailscale.LocalClient, error) {
+	if ta.localclient != nil {
+		return ta.localclient, nil
+	}
 
-		if err := ta.server.Start(); err != nil {
-			return err
-		}
-
-		var err error
-		ta.client, err = ta.server.LocalClient()
-		if err != nil {
-			return err
+	// if request was made through a tsnet listener, set up the client for the associated tsnet
+	// server.
+	server := r.Context().Value(caddyhttp.ServerCtxKey).(*caddyhttp.Server)
+	for _, listener := range server.Listeners() {
+		if tsl, ok := listener.(tsnetListener); ok {
+			var err error
+			ta.localclient, err = tsl.Server().LocalClient()
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
-	return nil
-}
-
-func (ta *TailscaleAuth) Cleanup() error {
-	if ta.server != nil {
-		ta.server.Close()
+	if ta.localclient == nil {
+		// default to empty client that will talk to local tailscaled
+		ta.localclient = new(tailscale.LocalClient)
 	}
-	return nil
+
+	return ta.localclient, nil
 }
 
-func (TailscaleAuth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.User, bool, error) {
+type tsnetListener interface {
+	Server() *tsnet.Server
+}
+
+func (ta TailscaleAuth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.User, bool, error) {
 	user := caddyauth.User{}
-	info, err := tailscale.WhoIs(r.Context(), r.RemoteAddr)
+
+	client, err := ta.client(r)
 	if err != nil {
 		return user, false, err
 	}
+
+	info, err := client.WhoIs(r.Context(), r.RemoteAddr)
+	if err != nil {
+		return user, false, err
+	}
+
 	if len(info.Node.Tags) != 0 {
 		return user, false, fmt.Errorf("node %s has tags", info.Node.Hostinfo.Hostname())
 	}
+
 	var tailnet string
 	if !info.Node.Hostinfo.ShareeNode() {
 		if s, found := strs.CutPrefix(info.Node.Name, info.Node.ComputedName+"."); found {
@@ -99,29 +169,8 @@ func (TailscaleAuth) Authenticate(w http.ResponseWriter, r *http.Request) (caddy
 	return user, true, nil
 }
 
-func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
+func parseCaddyfile(_ httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
 	var ta TailscaleAuth
-	repl := caddy.NewReplacer()
-
-	for h.Next() {
-		for nesting := h.Nesting(); h.NextBlock(nesting); {
-			switch h.Val() {
-			case "auth_key":
-				if !h.NextArg() {
-					return nil, h.ArgErr()
-				}
-				ta.AuthKey = h.Val()
-				ta.AuthKey = repl.ReplaceAll(ta.AuthKey, "")
-			case "hostname":
-				if !h.NextArg() {
-					return nil, h.ArgErr()
-				}
-				ta.Hostname = h.Val()
-			case "verbose":
-				ta.Verbose = true
-			}
-		}
-	}
 
 	return caddyauth.Authentication{
 		ProvidersRaw: caddy.ModuleMap{
