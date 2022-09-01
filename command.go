@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tsauth
+package tscaddy
 
 import (
 	"encoding/json"
@@ -30,6 +30,7 @@ import (
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp/headers"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp/reverseproxy"
 	"github.com/caddyserver/caddy/v2/modules/caddytls"
+	"tailscale.com/util/strs"
 )
 
 func init() {
@@ -88,8 +89,20 @@ func cmdTailscaleProxy(fs caddycmd.Flags) (int, error) {
 		return caddy.ExitCodeFailedStartup, fmt.Errorf("--to is required")
 	}
 
+	// strip "tailscale/" prefix if present
+	from, tsBind := strs.CutPrefix(from, "tailscale/")
+
 	// set up the downstream address; assume missing information from given parts
 	fromAddr, err := httpcaddyfile.ParseAddress(from)
+
+	var listen string
+	if tsBind {
+		listen = "tailscale/" + fromAddr.Host + ":" + fromAddr.Port
+		fromAddr.Host = ""
+	} else {
+		listen = ":" + fromAddr.Port
+	}
+
 	if err != nil {
 		return caddy.ExitCodeFailedStartup, fmt.Errorf("invalid downstream address %s: %v", from, err)
 	}
@@ -172,7 +185,7 @@ func cmdTailscaleProxy(fs caddycmd.Flags) (int, error) {
 
 	server := &caddyhttp.Server{
 		Routes: caddyhttp.RouteList{authRoute, route},
-		Listen: []string{":" + fromAddr.Port},
+		Listen: []string{listen},
 	}
 
 	httpApp := caddyhttp.App{
