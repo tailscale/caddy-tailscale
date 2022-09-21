@@ -10,8 +10,7 @@ It's really multiple plugins in one, providing:
  - a Caddy subcommand to quickly setup a reverse-proxy using either or both of
    the network listener or authentication provider.
 
-This plugin currently uses unreleased functionality in both Caddy and Tailscale
-and is very experimental.
+This plugin is still very experimental.
 
 ## Installation
 
@@ -24,7 +23,7 @@ xcaddy build master --with github.com/tailscale/caddy-tailscale
 
 ## Caddy network listener
 
-Coming in Caddy 2.6, modules are able to provide custom network listeners. This
+New in Caddy 2.6, modules are able to provide custom network listeners. This
 allows your Caddy server to directly join your Tailscale network without needing
 a separate Tailcale client running on the machine exposing a network device.
 Each site can be configured in Caddy to join your network as a separate node, or
@@ -98,14 +97,14 @@ issue.
 
 New nodes can be added to your Tailscale network by providing an [Auth
 key](https://tailscale.com/kb/1085/auth-keys/) or by following a special URL.
-Auth keys are provided to Caddy via the `TS_AUTHKEY` or `TS_AUTHKEY_<host>`
+Auth keys are provided to Caddy via the `TS_AUTHKEY` or `TS_AUTHKEY_<HOST>`
 environment variable.  So if your network listener was `tailscale/myhost`, then
-it would look for the `TS_AUTHKEY_MYHOST` environment variable, then
+it would look first for the `TS_AUTHKEY_MYHOST` environment variable, then
 `TS_AUTHKEY`.
 
 If no auth key is provided, then Tailscale will generate a URL that can be used
 to add the new node and print it to the Caddy log.  Tailscale logs can be
-somewhat noisy so are turned off by default. Set `TS_DEBUG=1` to see the URL
+somewhat noisy so are turned off by default. Set `TS_VERBOSE=1` to see the URL
 logged.  After the node had been added to your network, you can restart Caddy
 without the debug flag.
 
@@ -118,6 +117,20 @@ well as set various fields on the Caddy user object that can be passed to
 applications, similar to [nginx-auth][].
 
 [nginx-auth]: https://github.com/tailscale/tailscale/tree/main/cmd/nginx-auth
+
+Set the [`order`](https://caddyserver.com/docs/caddyfile/options#order)
+directive in your global options to instruct Caddy when to process
+`tailscale_auth`.  For example, in a Caddyfile:
+
+```
+{
+  order tailscale_auth after basicauth
+}
+
+:80 {
+  tailscale_auth
+}
+```
 
 The following fields are set on the Caddy user object:
 
