@@ -1,7 +1,6 @@
 package tscaddy
 
 import (
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -146,7 +145,8 @@ func (ta TailscaleAuth) Authenticate(w http.ResponseWriter, r *http.Request) (ca
 	}
 
 	if len(info.Node.Tags) != 0 {
-		return user, false, fmt.Errorf("node %s has tags", info.Node.Hostinfo.Hostname())
+		info.UserProfile.LoginName = strings.Replace(info.Node.Tags[0], ":", "___", -1) + "@tags.in.your.tailnet"
+		info.UserProfile.DisplayName = "A tagged node with tags: " + strings.Join(info.Node.Tags, ", ")
 	}
 
 	var tailnet string
