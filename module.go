@@ -1,6 +1,7 @@
 package tscaddy
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -40,7 +41,7 @@ func init() {
 //
 // Auth keys can be provided in environment variables of the form TS_AUTHKEY_<HOST>.  If
 // no host is specified in the address, the environment variable TS_AUTHKEY will be used.
-func getListener(_, addr string) (net.Listener, error) {
+func getListener(_ context.Context, _, addr string, _ net.ListenConfig) (any, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err
