@@ -2,6 +2,7 @@ package tscaddy
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -30,19 +31,59 @@ var (
 func init() {
 	caddy.RegisterModule(TailscaleAuth{})
 	httpcaddyfile.RegisterHandlerDirective("tailscale_auth", parseCaddyfile)
-	caddy.RegisterNetwork("tailscale", getListener)
+	caddy.RegisterNetwork("tailscale", getPlainListener)
+	caddy.RegisterNetwork("tailscale+tls", getTLSListener)
 }
 
-// getListener returns a tailscale net.Listener for Caddy apps to listen on. The specified
-// address will take the form of "tailscale/host:port" with host being optional.  If
-// specified, host will be provided to tsnet as the desired hostname for the tailscale
-// node.  Only one tsnet server is created per host, even if multiple ports are being
-// listened on for the host.
+func getPlainListener(_ context.Context, network string, addr string, _ net.ListenConfig) (any, error) {
+	s, err := getServer("", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.Listen(network, ":"+port)
+}
+
+func getTLSListener(_ context.Context, network string, addr string, _ net.ListenConfig) (any, error) {
+	s, err := getServer("", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	ln, err := s.Listen(network, ":"+port)
+	if err != nil {
+		return nil, err
+	}
+
+	localClient, _ := s.LocalClient()
+
+	ln = tls.NewListener(ln, &tls.Config{
+		GetCertificate: localClient.GetCertificate,
+	})
+
+	return ln, nil
+}
+
+// getServer returns a tailscale tsnet.Server for Caddy apps to listen on. The specified
+// address will take the form of "tailscale/host:port" or "tailscale+tls/host:port" with
+// host being optional. If specified, host will be provided to tsnet as the desired
+// hostname for the tailscale node. Only one tsnet server is created per host, even if
+// multiple ports are being listened on for the host.
 //
 // Auth keys can be provided in environment variables of the form TS_AUTHKEY_<HOST>.  If
 // no host is specified in the address, the environment variable TS_AUTHKEY will be used.
-func getListener(_ context.Context, _, addr string, _ net.ListenConfig) (any, error) {
-	host, port, err := net.SplitHostPort(addr)
+func getServer(_, addr string) (*tsnet.Server, error) {
+	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +127,7 @@ func getListener(_ context.Context, _, addr string, _ net.ListenConfig) (any, er
 	}
 	defer mu.Unlock()
 
-	return s.Listen("tcp", ":"+port)
+	return s, nil
 }
 
 type TailscaleAuth struct {
