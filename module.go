@@ -132,6 +132,8 @@ func getServer(_, addr string) (*tsnet.Server, error) {
 
 type TailscaleAuth struct {
 	localclient *tailscale.LocalClient
+
+	AllowTaggedNodes bool `json:"allow_tagged_nodes"`
 }
 
 func (TailscaleAuth) CaddyModule() caddy.ModuleInfo {
@@ -187,7 +189,10 @@ func (ta TailscaleAuth) Authenticate(w http.ResponseWriter, r *http.Request) (ca
 		return user, false, err
 	}
 
-	if len(info.Node.Tags) != 0 {
+	if ta.AllowTaggedNodes && len(info.Node.Tags) != 0 {
+		info.UserProfile.LoginName = strings.Replace(info.Node.Tags[0], ":", "___", -1) + "@tags.in.your.tailnet"
+		info.UserProfile.DisplayName = "A tagged node with tags: " + strings.Join(info.Node.Tags, ", ")
+	} else {
 		return user, false, fmt.Errorf("node %s has tags", info.Node.Hostinfo.Hostname())
 	}
 
