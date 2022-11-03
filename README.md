@@ -95,6 +95,28 @@ However, having a single Caddy site connect to separate Tailscale nodes doesn't
 quite work correctly. If this is something you actually need, please open an
 issue.
 
+### HTTPS support
+
+At this time, the Tailscale plugin for Caddy doesn't support using Caddy's
+native HTTPS resolvers. You will need to use the `tailscale+tls` bind protocol
+with a configuration like this:
+
+```
+{
+    order tailscale_auth after basicauth
+    auto_https off
+}
+
+:443 {
+    bind tailscale+tls/myhost
+}
+```
+
+Please note that because you currently need to turn `auto_https` support off, it
+is not advised to use the same instance of Caddy for your external-facing apps
+as you use for your internal-facing apps. This deficiency will be resolved as
+soon as possible.
+
 ### Authenticating to the Tailcale network
 
 New nodes can be added to your Tailscale network by providing an [Auth
