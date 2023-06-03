@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
@@ -30,7 +31,6 @@ import (
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp/headers"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp/reverseproxy"
 	"github.com/caddyserver/caddy/v2/modules/caddytls"
-	"tailscale.com/util/strs"
 )
 
 func init() {
@@ -90,7 +90,7 @@ func cmdTailscaleProxy(fs caddycmd.Flags) (int, error) {
 	}
 
 	// strip "tailscale/" prefix if present
-	from, tsBind := strs.CutPrefix(from, "tailscale/")
+	from, tsBind := strings.CutPrefix(from, "tailscale/")
 
 	// set up the downstream address; assume missing information from given parts
 	fromAddr, err := httpcaddyfile.ParseAddress(from)
