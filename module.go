@@ -10,7 +10,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"sync"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
@@ -22,9 +21,7 @@ import (
 )
 
 var (
-	// servers maps hostnames to tsnet servers. It is protected by mu.
-	servers = make(map[string]*tsnet.Server)
-	mu      = sync.RWMutex{}
+	servers = caddy.NewUsagePool()
 )
 
 func init() {
@@ -34,31 +31,38 @@ func init() {
 	caddy.RegisterNetwork("tailscale+tls", getTLSListener)
 }
 
-func getPlainListener(_ context.Context, network string, addr string, _ net.ListenConfig) (any, error) {
-	s, err := getServer("", addr)
+func getPlainListener(_ context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
+	network, host, port, err := caddy.SplitNetworkAddress(addr)
 	if err != nil {
 		return nil, err
 	}
 
-	_, port, err := net.SplitHostPort(addr)
+	s, err := getServer("", host)
 	if err != nil {
 		return nil, err
+	}
+
+	if network == "" {
+		network = "tcp"
 	}
 
 	return s.Listen(network, ":"+port)
 }
 
-func getTLSListener(_ context.Context, network string, addr string, _ net.ListenConfig) (any, error) {
-	s, err := getServer("", addr)
+func getTLSListener(_ context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
+	network, host, port, err := caddy.SplitNetworkAddress(addr)
 	if err != nil {
 		return nil, err
 	}
 
-	_, port, err := net.SplitHostPort(addr)
+	s, err := getServer("", host)
 	if err != nil {
 		return nil, err
 	}
 
+	if network == "" {
+		network = "tcp"
+	}
 	ln, err := s.Listen(network, ":"+port)
 	if err != nil {
 		return nil, err
@@ -81,16 +85,14 @@ func getTLSListener(_ context.Context, network string, addr string, _ net.Listen
 //
 // Auth keys can be provided in environment variables of the form TS_AUTHKEY_<HOST>.  If
 // no host is specified in the address, the environment variable TS_AUTHKEY will be used.
-func getServer(_, addr string) (*tsnet.Server, error) {
-	host, _, err := net.SplitHostPort(addr)
+func getServer(_, addr string) (*tsnetServerDestructor, error) {
+	_, host, _, err := caddy.SplitNetworkAddress(addr)
 	if err != nil {
 		return nil, err
 	}
 
-	mu.Lock()
-	s, ok := servers[host]
-	if !ok {
-		s = &tsnet.Server{
+	s, _, err := servers.LoadOrNew(host, func() (caddy.Destructor, error) {
+		s := &tsnet.Server{
 			Hostname: host,
 			Logf: func(format string, args ...any) {
 				// TODO: parse out and always log authURL so you don't need
@@ -122,11 +124,15 @@ func getServer(_, addr string) (*tsnet.Server, error) {
 			}
 		}
 
-		servers[host] = s
+		return &tsnetServerDestructor{
+			s,
+		}, nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	defer mu.Unlock()
 
-	return s, nil
+	return s.(*tsnetServerDestructor), nil
 }
 
 type TailscaleAuth struct {
@@ -218,4 +224,12 @@ func parseCaddyfile(_ httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 			"tailscale": caddyconfig.JSON(ta, nil),
 		},
 	}, nil
+}
+
+type tsnetServerDestructor struct {
+	*tsnet.Server
+}
+
+func (t tsnetServerDestructor) Destruct() error {
+	return t.Close()
 }
