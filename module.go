@@ -29,6 +29,7 @@ func init() {
 	httpcaddyfile.RegisterHandlerDirective("tailscale_auth", parseCaddyfile)
 	caddy.RegisterNetwork("tailscale", getPlainListener)
 	caddy.RegisterNetwork("tailscale+tls", getTLSListener)
+	caddy.RegisterModule(&TailscaleCaddyTransport{})
 }
 
 func getPlainListener(_ context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
