@@ -199,8 +199,8 @@ func cmdTailscaleProxy(fs caddycmd.Flags) (int, error) {
 		tlsApp := caddytls.TLS{
 			Automation: &caddytls.AutomationConfig{
 				Policies: []*caddytls.AutomationPolicy{{
-					Subjects:   []string{fromAddr.Host},
-					IssuersRaw: []json.RawMessage{json.RawMessage(`{"module":"internal"}`)},
+					SubjectsRaw: []string{fromAddr.Host},
+					IssuersRaw:  []json.RawMessage{json.RawMessage(`{"module":"internal"}`)},
 				}},
 			},
 		}

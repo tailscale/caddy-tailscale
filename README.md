@@ -5,12 +5,12 @@
 The Tailscale Caddy plugin brings Tailscale integration to the Caddy web server.
 It's really multiple plugins in one, providing:
 
- - the ability for a Caddy server to directly join your Tailscale network
-   without needing a separate Tailscale client.
- - a Caddy authentication provider, so that you can pass a user's Tailscale
-   identity to an applicatiton.
- - a Caddy subcommand to quickly setup a reverse-proxy using either or both of
-   the network listener or authentication provider.
+- the ability for a Caddy server to directly join your Tailscale network
+  without needing a separate Tailscale client.
+- a Caddy authentication provider, so that you can pass a user's Tailscale
+  identity to an applicatiton.
+- a Caddy subcommand to quickly setup a reverse-proxy using either or both of
+  the network listener or authentication provider.
 
 This plugin is still very experimental.
 
@@ -20,7 +20,7 @@ Use [xcaddy](https://github.com/caddyserver/xcaddy) to build Caddy with the
 Tailscale plugin included.
 
 ```
-xcaddy build v2.6.4 --with github.com/tailscale/caddy-tailscale
+xcaddy build v2.7.3 --with github.com/tailscale/caddy-tailscale
 ```
 
 ## Caddy network listener
@@ -33,7 +33,7 @@ you can have multiple sites listening on different ports of a single node.
 
 ### Configuration
 
-Configure Caddy to listen on a special "tailscale" network address.  If using a
+Configure Caddy to listen on a special "tailscale" network address. If using a
 Caddyfile, use the [bind directive](https://caddyserver.com/docs/caddyfile/directives/bind):
 
 ```
@@ -59,9 +59,7 @@ listen address:
     "http": {
       "servers": {
         "srv0": {
-          "listen": [
-            "tailscale/myhost:80"
-          ]
+          "listen": ["tailscale/myhost:80"]
         }
       }
     }
@@ -70,7 +68,7 @@ listen address:
 ```
 
 Caddy will join your Tailscale network and listen only on that network
-interface.  Multiple addresses can be specified if you want to listen on the
+interface. Multiple addresses can be specified if you want to listen on the
 Tailscale address as well as a local address:
 
 ```
@@ -122,16 +120,15 @@ soon as possible.
 New nodes can be added to your Tailscale network by providing an [Auth
 key](https://tailscale.com/kb/1085/auth-keys/) or by following a special URL.
 Auth keys are provided to Caddy via the `TS_AUTHKEY` or `TS_AUTHKEY_<HOST>`
-environment variable.  So if your network listener was `tailscale/myhost`, then
+environment variable. So if your network listener was `tailscale/myhost`, then
 it would look first for the `TS_AUTHKEY_MYHOST` environment variable, then
 `TS_AUTHKEY`.
 
 If no auth key is provided, then Tailscale will generate a URL that can be used
-to add the new node and print it to the Caddy log.  Tailscale logs can be
+to add the new node and print it to the Caddy log. Tailscale logs can be
 somewhat noisy so are turned off by default. Set `TS_VERBOSE=1` to see the URL
-logged.  After the node had been added to your network, you can restart Caddy
+logged. After the node had been added to your network, you can restart Caddy
 without the debug flag.
-
 
 ## Caddy authentication provider
 
@@ -144,7 +141,7 @@ applications, similar to [nginx-auth][].
 
 Set the [`order`](https://caddyserver.com/docs/caddyfile/options#order)
 directive in your global options to instruct Caddy when to process
-`tailscale_auth`.  For example, in a Caddyfile:
+`tailscale_auth`. For example, in a Caddyfile:
 
 ```
 {
@@ -158,12 +155,12 @@ directive in your global options to instruct Caddy when to process
 
 The following fields are set on the Caddy user object:
 
- - `user.id`: the Tailscale email-ish user ID
- - `user.tailscale_login`: the username portion of the Tailscale user ID
- - `user.tailscale_user`: same as `user.id`
- - `user.tailscale_name`: the display name of the Tailscale user
- - `user.tailscale_profile_picture`: the URL of the Tailscale user's profile picture
- - `user.tailscale_tailnet`: the name of the Tailscale network the user is a member of
+- `user.id`: the Tailscale email-ish user ID
+- `user.tailscale_login`: the username portion of the Tailscale user ID
+- `user.tailscale_user`: same as `user.id`
+- `user.tailscale_name`: the display name of the Tailscale user
+- `user.tailscale_profile_picture`: the URL of the Tailscale user's profile picture
+- `user.tailscale_tailnet`: the name of the Tailscale network the user is a member of
 
 These can be mapped to HTTP headers passed to an application using something
 like the following in your Caddyfile:
@@ -175,7 +172,7 @@ header_up X-Webauth-Name {http.auth.user.tailscale_name}
 ```
 
 When used with a Tailscale listener (described above), that Tailscale connection
-is used to identify the remote user.  Otherwise, the authentication provider
+is used to identify the remote user. Otherwise, the authentication provider
 will attempt to connect to the Tailscale daemon running on the local machine.
 
 ## tailscale-proxy subcommand
