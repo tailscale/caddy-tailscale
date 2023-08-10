@@ -3,6 +3,7 @@ package tscaddy
 import (
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
@@ -21,7 +22,12 @@ func (t *TailscaleCaddyTransport) UnmarshalCaddyfile(d *caddyfile.Dispenser) err
 func (t *TailscaleCaddyTransport) Provision(context caddy.Context) error {
 	t.logger = context.Logger()
 
-	s, err := getServer("", "caddy-tsnet-client:80")
+	host := os.Getenv("TS_HOSTNAME")
+	if host == "" {
+		host = "caddy-tsnet-client"
+	}
+
+	s, err := getServer("", host+":80")
 	if err != nil {
 		return err
 	}

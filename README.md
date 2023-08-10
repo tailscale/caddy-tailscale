@@ -8,7 +8,7 @@ It's really multiple plugins in one, providing:
 - the ability for a Caddy server to directly join your Tailscale network
   without needing a separate Tailscale client.
 - a Caddy authentication provider, so that you can pass a user's Tailscale
-  identity to an applicatiton.
+  identity to an application.
 - a Caddy subcommand to quickly setup a reverse-proxy using either or both of
   the network listener or authentication provider.
 
@@ -27,7 +27,7 @@ xcaddy build v2.7.3 --with github.com/tailscale/caddy-tailscale
 
 New in Caddy 2.6, modules are able to provide custom network listeners. This
 allows your Caddy server to directly join your Tailscale network without needing
-a separate Tailcale client running on the machine exposing a network device.
+a separate Tailscale client running on the machine exposing a network device.
 Each site can be configured in Caddy to join your network as a separate node, or
 you can have multiple sites listening on different ports of a single node.
 
@@ -115,7 +115,7 @@ is not advised to use the same instance of Caddy for your external-facing apps
 as you use for your internal-facing apps. This deficiency will be resolved as
 soon as possible.
 
-### Authenticating to the Tailcale network
+### Authenticating to the Tailscale network
 
 New nodes can be added to your Tailscale network by providing an [Auth
 key](https://tailscale.com/kb/1085/auth-keys/) or by following a special URL.
@@ -129,6 +129,10 @@ to add the new node and print it to the Caddy log. Tailscale logs can be
 somewhat noisy so are turned off by default. Set `TS_VERBOSE=1` to see the URL
 logged. After the node had been added to your network, you can restart Caddy
 without the debug flag.
+
+### Choosing the Tailscale hostname
+
+The default Tailscale hostname is set to `caddy-tsnet-client`. You may use your own Tailscale hostname by setting the `TS_HOSTNAME` environment variable.
 
 ## Caddy authentication provider
 
