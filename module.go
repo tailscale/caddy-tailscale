@@ -104,6 +104,12 @@ func getServer(_, addr string) (*tsnetServerDestructor, error) {
 			},
 		}
 
+		// Setting ControlURL to "TS_CONTROL_URL". If empty or not found will default to default of tsnet "https://controlplane.tailscale.com"
+		controlUrl, controlUrlFound := os.LookupEnv("TS_CONTROL_URL")
+		if controlUrlFound && controlUrl != "" {
+			s.ControlURL = controlUrl
+		}
+
 		if host != "" {
 			// Set authkey to "TS_AUTHKEY_<HOST>".  If empty,
 			// fall back to "TS_AUTHKEY".
