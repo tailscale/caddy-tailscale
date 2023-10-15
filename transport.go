@@ -10,8 +10,9 @@ import (
 )
 
 type TailscaleCaddyTransport struct {
-	logger *zap.Logger
-	server *tsnetServerDestructor
+	logger     *zap.Logger
+	server     *tsnetServerDestructor
+	ControlURL string `json:"controlURL,omitempty"`
 }
 
 func (t *TailscaleCaddyTransport) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
@@ -21,7 +22,7 @@ func (t *TailscaleCaddyTransport) UnmarshalCaddyfile(d *caddyfile.Dispenser) err
 func (t *TailscaleCaddyTransport) Provision(context caddy.Context) error {
 	t.logger = context.Logger()
 
-	s, err := getServer("", "caddy-tsnet-client:80")
+	s, err := getServer("", "caddy-tsnet-client:80", t.ControlURL)
 	if err != nil {
 		return err
 	}

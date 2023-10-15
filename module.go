@@ -33,37 +33,30 @@ func init() {
 }
 
 func getPlainListener(_ context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
-	network, host, port, err := caddy.SplitNetworkAddress(addr)
+	controlURL, network, host, port, err := parseAddr(addr)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := getServer("", host)
+	s, err := getServer("", host, controlURL)
 	if err != nil {
 		return nil, err
-	}
-
-	if network == "" {
-		network = "tcp"
 	}
 
 	return s.Listen(network, ":"+port)
 }
 
 func getTLSListener(_ context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
-	network, host, port, err := caddy.SplitNetworkAddress(addr)
+	controlURL, network, host, port, err := parseAddr(addr)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := getServer("", host)
+	s, err := getServer("", host, controlURL)
 	if err != nil {
 		return nil, err
 	}
 
-	if network == "" {
-		network = "tcp"
-	}
 	ln, err := s.Listen(network, ":"+port)
 	if err != nil {
 		return nil, err
@@ -86,7 +79,7 @@ func getTLSListener(_ context.Context, _ string, addr string, _ net.ListenConfig
 //
 // Auth keys can be provided in environment variables of the form TS_AUTHKEY_<HOST>.  If
 // no host is specified in the address, the environment variable TS_AUTHKEY will be used.
-func getServer(_, addr string) (*tsnetServerDestructor, error) {
+func getServer(_, addr string, controlURL string) (*tsnetServerDestructor, error) {
 	_, host, _, err := caddy.SplitNetworkAddress(addr)
 	if err != nil {
 		return nil, err
@@ -104,10 +97,9 @@ func getServer(_, addr string) (*tsnetServerDestructor, error) {
 			},
 		}
 
-		// Setting ControlURL to "TS_CONTROL_URL". If empty or not found will default to default of tsnet "https://controlplane.tailscale.com"
-		controlUrl, controlUrlFound := os.LookupEnv("TS_CONTROL_URL")
-		if controlUrlFound && controlUrl != "" {
-			s.ControlURL = controlUrl
+		// Setting ControlURL. If empty or not found will default to default of tsnet "https://controlplane.tailscale.com"
+		if controlURL != "" {
+			s.ControlURL = controlURL
 		}
 
 		if host != "" {
@@ -231,6 +223,34 @@ func parseCaddyfile(_ httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 			"tailscale": caddyconfig.JSON(ta, nil),
 		},
 	}, nil
+}
+
+func parseAddr(addr string) (controlURL, network, host, port string, err error) {
+	controlURL = ""
+
+	network, host, port, err = caddy.SplitNetworkAddress(addr)
+	if err != nil {
+		return "", "", "", "", err
+	}
+
+	switch network {
+	case "", "tcp", "tcp4", "tcp6", "udp", "udp4", "udp6":
+	default:
+		controlURL = fmt.Sprintf("https://%s", network)
+		network = "tcp"
+		beforeSlash, afterSlash, slashFound := strings.Cut(host, "/")
+		if slashFound {
+			switch beforeSlash {
+			case "", "tcp", "tcp4", "tcp6", "udp", "udp4", "udp6":
+				network = beforeSlash
+				host = afterSlash
+			default:
+				network = "tcp"
+			}
+		}
+	}
+
+	return controlURL, network, host, port, nil
 }
 
 type tsnetServerDestructor struct {
