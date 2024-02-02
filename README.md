@@ -93,6 +93,36 @@ However, having a single Caddy site connect to separate Tailscale nodes doesn't
 quite work correctly. If this is something you actually need, please open an
 issue.
 
+#### Alternative ControlURL
+
+To use with a custom coordination server (Headscale) you can include your ControlURL with the listen network.
+
+```
+:80 {
+  bind tailscale/example.de/a
+}
+
+:80 {
+  bind tailscale/example.de/b
+}
+```
+
+It also supports specifying the used protocol (defaults to tcp):
+
+```
+:80 {
+  bind tailscale/example.de/udp/a
+}
+
+:80 {
+  bind tailscale/udp/b
+}
+```
+
+Current shortcommings:
+- no support for path with ControlURL, 
+- it defaults to HTTPS for connection to custom control server
+
 ### HTTPS support
 
 At this time, the Tailscale plugin for Caddy doesn't support using Caddy's
@@ -185,4 +215,43 @@ For example:
 
 ```
 xcaddy tailscale-proxy --from "tailscale/myhost:80" --to localhost:8000
+```
+
+## Caddy transport provider
+
+You can also specifiy tailscale as protocol to be used by caddy to proxy to your application.
+
+```json
+{
+ {
+  "apps": {
+    "http": {
+      "servers": {
+        "status": {
+          "listen": [
+            "tailscale/example.com/status:80"
+          ],
+          "routes": [
+            {
+              "handle": [
+                {
+                  "handler": "reverse_proxy",
+                  "upstreams": [
+                    {
+                      "dial": "node1:3000"
+                    }
+                  ],
+                  "transport": {
+                    "protocol": "tailscale",
+                    "controlURL": "https://example.com"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
 ```
