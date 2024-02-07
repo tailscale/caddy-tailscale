@@ -7,6 +7,16 @@ type TSApp struct {
 	DefaultAuthKey string `json:"auth_key,omitempty" caddy:"namespace=tailscale.auth_key"`
 
 	Ephemeral bool `json:"ephemeral,omitempty" caddy:"namespace=tailscale.ephemeral"`
+
+	Servers map[string]TSServer `json:"servers,omitempty" caddy:"namespace=tailscale"`
+}
+
+type TSServer struct {
+	AuthKey string `json:"auth_key,omitempty" caddy:"namespace=auth_key"`
+
+	Ephemeral bool `json:"ephemeral,omitempty" caddy:"namespace=tailscale.ephemeral"`
+
+	name string
 }
 
 func (TSApp) CaddyModule() caddy.ModuleInfo {

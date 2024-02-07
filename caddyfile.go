@@ -11,14 +11,18 @@ func init() {
 }
 
 func parseApp(d *caddyfile.Dispenser, _ any) (any, error) {
-	app := new(TSApp)
+	app := &TSApp{
+		Servers: make(map[string]TSServer),
+	}
 	if !d.Next() {
 		return app, d.ArgErr()
 
 	}
 
-	for nesting := d.Nesting(); d.NextBlock(nesting); {
-		switch d.Val() {
+	for d.NextBlock(0) {
+		val := d.Val()
+
+		switch val {
 		case "auth_key":
 			if !d.NextArg() {
 				return nil, d.ArgErr()
@@ -27,7 +31,14 @@ func parseApp(d *caddyfile.Dispenser, _ any) (any, error) {
 		case "ephemeral":
 			app.Ephemeral = true
 		default:
-			return nil, d.Errf("unrecognized subdirective: %s", d.Val())
+			svr, err := parseServer(d)
+			if app.Servers == nil {
+				app.Servers = map[string]TSServer{}
+			}
+			if err != nil {
+				return nil, err
+			}
+			app.Servers[svr.name] = svr
 		}
 	}
 
@@ -35,4 +46,32 @@ func parseApp(d *caddyfile.Dispenser, _ any) (any, error) {
 		Name:  "tailscale",
 		Value: caddyconfig.JSON(app, nil),
 	}, nil
+}
+
+func parseServer(d *caddyfile.Dispenser) (TSServer, error) {
+	name := d.Val()
+	segment := d.NewFromNextSegment()
+
+	if !segment.Next() {
+		return TSServer{}, d.ArgErr()
+	}
+
+	svr := TSServer{}
+	svr.name = name
+	for nesting := segment.Nesting(); segment.NextBlock(nesting); {
+		val := segment.Val()
+		switch val {
+		case "auth_key":
+			if !segment.NextArg() {
+				return svr, segment.ArgErr()
+			}
+			svr.AuthKey = segment.Val()
+		case "ephemeral":
+			svr.Ephemeral = true
+		default:
+			return svr, segment.Errf("unrecognized subdirective: %s", segment.Val())
+		}
+	}
+
+	return svr, nil
 }
