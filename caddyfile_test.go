@@ -49,12 +49,23 @@ func Test_ParseApp(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "unknown subdirective",
+			name: "empty server",
 			d: caddyfile.NewTestDispenser(`
 				tailscsale {
 					foo
 				}`),
-			wantErr: true,
+			want: `{"servers":{"foo":{}}}`,
+		},
+		{
+			name: "tailscale with server",
+			d: caddyfile.NewTestDispenser(`
+				tailscsale {
+					foo {
+						auth_key  abcdefghijklmnopqrstuvwxyz
+					}
+				}`),
+			want:    `{"servers":{"foo":{"auth_key":"abcdefghijklmnopqrstuvwxyz"}}}`,
+			wantErr: false,
 		},
 	}
 
@@ -66,6 +77,10 @@ func Test_ParseApp(t *testing.T) {
 					t.Errorf("parseApp() error = %v, wantErr %v", err, testcase.wantErr)
 					return
 				}
+				return
+			}
+			if testcase.wantErr && err == nil {
+				t.Errorf("parseApp() err = %v, wantErr %v", err, testcase.wantErr)
 				return
 			}
 			gotJSON := string(got.(httpcaddyfile.App).Value)
