@@ -22,6 +22,7 @@ import (
 
 var (
 	servers = caddy.NewUsagePool()
+	app     = caddy.NewUsagePool()
 )
 
 func init() {
