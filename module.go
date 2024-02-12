@@ -107,7 +107,6 @@ func getServer(_, addr string) (*tsnetServerDestructor, error) {
 
 		if host != "" {
 			s.AuthKey = getAuthKey(host)
-			log.Println("auth_key", s.AuthKey)
 
 			// Set config directory for tsnet.  By default, tsnet will use the name of the
 			// running program, but we include the hostname as well so that a single
@@ -134,6 +133,11 @@ func getServer(_, addr string) (*tsnetServerDestructor, error) {
 }
 
 func getAuthKey(host string) string {
+	hostAuthKey, loaded := app.LoadOrStore(host, "")
+	if loaded {
+		return hostAuthKey.(TSServer).AuthKey
+	}
+
 	storedAuthKey, loaded := app.LoadOrStore(authUsageKey, "")
 	if loaded {
 		return storedAuthKey.(string)
