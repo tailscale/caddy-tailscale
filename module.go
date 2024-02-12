@@ -22,6 +22,7 @@ import (
 
 var (
 	servers = caddy.NewUsagePool()
+	app     = caddy.NewUsagePool()
 )
 
 func init() {
@@ -105,12 +106,7 @@ func getServer(_, addr string) (*tsnetServerDestructor, error) {
 		}
 
 		if host != "" {
-			// Set authkey to "TS_AUTHKEY_<HOST>".  If empty,
-			// fall back to "TS_AUTHKEY".
-			s.AuthKey = os.Getenv("TS_AUTHKEY_" + strings.ToUpper(host))
-			if s.AuthKey == "" {
-				s.AuthKey = os.Getenv("TS_AUTHKEY")
-			}
+			s.AuthKey = getAuthKey(host)
 
 			// Set config directory for tsnet.  By default, tsnet will use the name of the
 			// running program, but we include the hostname as well so that a single
@@ -134,6 +130,26 @@ func getServer(_, addr string) (*tsnetServerDestructor, error) {
 	}
 
 	return s.(*tsnetServerDestructor), nil
+}
+
+func getAuthKey(host string) string {
+	hostAuthKey, loaded := app.LoadOrStore(host, "")
+	if loaded {
+		return hostAuthKey.(TSServer).AuthKey
+	}
+
+	storedAuthKey, loaded := app.LoadOrStore(authUsageKey, "")
+	if loaded {
+		return storedAuthKey.(string)
+	}
+
+	// Set authkey to "TS_AUTHKEY_<HOST>".  If empty,
+	// fall back to "TS_AUTHKEY".
+	authKey := os.Getenv("TS_AUTHKEY_" + strings.ToUpper(host))
+	if authKey == "" {
+		authKey = os.Getenv("TS_AUTHKEY")
+	}
+	return authKey
 }
 
 type TailscaleAuth struct {

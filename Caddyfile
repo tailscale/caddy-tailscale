@@ -1,5 +1,12 @@
 {
 	order tailscale_auth after basicauth
+	tailscale {
+		auth_key "tskey-auth-"
+
+		caddy {
+			auth_key "tskey-auth-caddy"
+		}
+	}
 }
 
 :80 {
