@@ -35,8 +35,9 @@ func Test_GetAuthKey(t *testing.T) {
 			host: testHost,
 		},
 		"host key from environment": {
-			want: testHostKey,
-			host: testHost,
+			want:    testHostKey,
+			skipApp: true,
+			host:    testHost,
 		},
 	}
 	for name, tt := range tests {
