@@ -1,6 +1,14 @@
 package tscaddy
 
-import "github.com/caddyserver/caddy/v2"
+import (
+	"errors"
+
+	"github.com/caddyserver/caddy/v2"
+)
+
+func init() {
+	caddy.RegisterModule(TSApp{})
+}
 
 type TSApp struct {
 	// DefaultAuthKey is the default auth key to use for Tailscale if no other auth key is specified.
