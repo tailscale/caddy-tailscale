@@ -20,7 +20,7 @@ Use [xcaddy](https://github.com/caddyserver/xcaddy) to build Caddy with the
 Tailscale plugin included.
 
 ```
-xcaddy build v2.7.3 --with github.com/tailscale/caddy-tailscale
+xcaddy build v2.7.6 --with github.com/tailscale/caddy-tailscale
 ```
 
 ## Caddy network listener
