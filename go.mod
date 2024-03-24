@@ -2,8 +2,6 @@ module github.com/tailscale/caddy-tailscale
 
 go 1.22.0
 
-toolchain go1.22.1
-
 require (
 	github.com/caddyserver/caddy/v2 v2.7.3
 	go.uber.org/zap v1.26.0
