@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/google/go-cmp/cmp"
@@ -14,6 +15,7 @@ func Test_ParseApp(t *testing.T) {
 		name    string
 		d       *caddyfile.Dispenser
 		want    string
+		authKey string
 		wantErr bool
 	}{
 		{
@@ -30,7 +32,8 @@ func Test_ParseApp(t *testing.T) {
 				tailscsale {
 					auth_key abcdefghijklmnopqrstuvwxyz
 				}`),
-			want: `{"auth_key":"abcdefghijklmnopqrstuvwxyz"}`,
+			want:    `{"auth_key":"abcdefghijklmnopqrstuvwxyz"}`,
+			authKey: "abcdefghijklmnopqrstuvwxyz",
 		},
 		{
 			name: "ephemeral",
@@ -38,7 +41,8 @@ func Test_ParseApp(t *testing.T) {
 				tailscsale {
 					ephemeral
 				}`),
-			want: `{"ephemeral":true}`,
+			want:    `{"ephemeral":true}`,
+			authKey: "",
 		},
 		{
 			name: "missing auth key",
@@ -60,12 +64,14 @@ func Test_ParseApp(t *testing.T) {
 			name: "tailscale with server",
 			d: caddyfile.NewTestDispenser(`
 				tailscsale {
+					auth_key 1234567890
 					foo {
 						auth_key  abcdefghijklmnopqrstuvwxyz
 					}
 				}`),
-			want:    `{"servers":{"foo":{"auth_key":"abcdefghijklmnopqrstuvwxyz"}}}`,
+			want:    `{"auth_key":"1234567890","servers":{"foo":{"auth_key":"abcdefghijklmnopqrstuvwxyz"}}}`,
 			wantErr: false,
+			authKey: "abcdefghijklmnopqrstuvwxyz",
 		},
 	}
 
@@ -87,6 +93,14 @@ func Test_ParseApp(t *testing.T) {
 			if diff := compareJSON(gotJSON, testcase.want, t); diff != "" {
 				t.Errorf("parseApp() diff(-got +want):\n%s", diff)
 			}
+			app := new(TSApp)
+			if err := json.Unmarshal([]byte(gotJSON), &app); err != nil {
+				t.Error("failed to unmarshal json into TSApp")
+			}
+			if err := app.Provision(caddy.Context{}); err != nil {
+				t.Error("failed to provision caddy app")
+			}
+
 		})
 	}
 

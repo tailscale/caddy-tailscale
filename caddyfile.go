@@ -10,11 +10,6 @@ func init() {
 	httpcaddyfile.RegisterGlobalOption("tailscale", parseApp)
 }
 
-const (
-	authUsageKey = "auth_key"
-	ephemeralKey = "ephemeral"
-)
-
 func parseApp(d *caddyfile.Dispenser, _ any) (any, error) {
 	app := &TSApp{
 		Servers: make(map[string]TSServer),

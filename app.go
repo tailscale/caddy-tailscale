@@ -35,12 +35,17 @@ func (TSApp) CaddyModule() caddy.ModuleInfo {
 }
 
 func (t *TSApp) Provision(ctx caddy.Context) error {
-	app.LoadOrStore(authUsageKey, t.DefaultAuthKey)
-	app.LoadOrStore(ephemeralKey, t.Ephemeral)
-
 	for _, svr := range t.Servers {
-		app.LoadOrStore(svr.name, svr)
+		if t.Ephemeral {
+			svr.Ephemeral = t.Ephemeral
+		}
+		if svr.AuthKey == "" {
+			svr.AuthKey = t.DefaultAuthKey
+		}
 	}
+
+	app = t
+
 	return nil
 }
 
@@ -59,5 +64,4 @@ func (t *TSApp) Stop() error {
 	return nil
 }
 
-// var _ caddyfile.Unmarshaler = (*TSApp)(nil)
 var _ caddy.App = (*TSApp)(nil)

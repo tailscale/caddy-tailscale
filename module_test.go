@@ -2,11 +2,8 @@ package tscaddy
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"testing"
-
-	"github.com/caddyserver/caddy/v2"
 )
 
 func Test_GetAuthKey(t *testing.T) {
@@ -21,10 +18,6 @@ func Test_GetAuthKey(t *testing.T) {
 		skipApp bool
 		want    string
 	}{
-		"default key from module": {
-			want: testkey,
-			host: "testhost",
-		},
 		"default key from environment": {
 			want:    testenvkey,
 			skipApp: true,
@@ -42,22 +35,20 @@ func Test_GetAuthKey(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			app = caddy.NewUsagePool()
-			if !tt.skipApp {
-				app.LoadOrStore(authUsageKey, testkey)
-				app.LoadOrStore(testHost, TSServer{
-					AuthKey: testHostKey,
-				})
+			app = &TSApp{
+				Servers: make(map[string]TSServer),
 			}
-			os.Setenv("TS_AUTHKEY", testenvkey)
+			if !tt.skipApp {
+				app.DefaultAuthKey = testkey
+				app.Servers[testHost] = TSServer{
+					AuthKey: testHostKey,
+				}
+			}
+			t.Setenv("TS_AUTHKEY", testenvkey)
 			hostKey := fmt.Sprintf("TS_AUTHKEY_%s", strings.ToUpper(testHost))
-			os.Setenv(hostKey, testHostKey)
-			t.Cleanup(func() {
-				os.Unsetenv("TS_AUTHKEY")
-				os.Unsetenv(hostKey)
-			})
+			t.Setenv(hostKey, testHostKey)
 
-			got := getAuthKey(tt.host)
+			got := getAuthKey(tt.host, app)
 			if got != tt.want {
 				t.Errorf("GetAuthKey() = %v, want %v", got, tt.want)
 			}

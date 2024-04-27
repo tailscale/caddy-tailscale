@@ -22,7 +22,7 @@ import (
 
 var (
 	servers = caddy.NewUsagePool()
-	app     = caddy.NewUsagePool()
+	app     *TSApp
 )
 
 func init() {
@@ -106,7 +106,8 @@ func getServer(_, addr string) (*tsnetServerDestructor, error) {
 		}
 
 		if host != "" {
-			s.AuthKey = getAuthKey(host)
+			s.AuthKey = getAuthKey(host, app)
+			s.Ephemeral = getEphemeral(host, app)
 
 			// Set config directory for tsnet.  By default, tsnet will use the name of the
 			// running program, but we include the hostname as well so that a single
@@ -132,15 +133,14 @@ func getServer(_, addr string) (*tsnetServerDestructor, error) {
 	return s.(*tsnetServerDestructor), nil
 }
 
-func getAuthKey(host string) string {
-	hostAuthKey, loaded := app.LoadOrStore(host, "")
-	if loaded {
-		return hostAuthKey.(TSServer).AuthKey
+func getAuthKey(host string, app *TSApp) string {
+	svr := app.Servers[host]
+	if svr.AuthKey != "" {
+		return svr.AuthKey
 	}
 
-	storedAuthKey, loaded := app.LoadOrStore(authUsageKey, "")
-	if loaded {
-		return storedAuthKey.(string)
+	if app.DefaultAuthKey != "" {
+		return app.DefaultAuthKey
 	}
 
 	// Set authkey to "TS_AUTHKEY_<HOST>".  If empty,
@@ -150,6 +150,14 @@ func getAuthKey(host string) string {
 		authKey = os.Getenv("TS_AUTHKEY")
 	}
 	return authKey
+}
+
+func getEphemeral(host string, app *TSApp) bool {
+	if svr, ok := app.Servers[host]; ok {
+		return svr.Ephemeral
+	}
+
+	return app.Ephemeral
 }
 
 type TailscaleAuth struct {
