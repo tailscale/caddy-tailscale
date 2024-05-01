@@ -26,6 +26,9 @@ var (
 )
 
 func init() {
+	app = &TSApp{
+		Servers: map[string]TSServer{},
+	}
 	caddy.RegisterModule(TailscaleAuth{})
 	httpcaddyfile.RegisterHandlerDirective("tailscale_auth", parseCaddyfile)
 	caddy.RegisterNetwork("tailscale", getPlainListener)
@@ -48,7 +51,10 @@ func getPlainListener(_ context.Context, _ string, addr string, _ net.ListenConf
 		network = "tcp"
 	}
 
-	return s.Listen(network, ":"+port)
+	ln := &tsnetServerDestructor{
+		Server: s.Server,
+	}
+	return ln.Listen(network, ":"+port)
 }
 
 func getTLSListener(_ context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
@@ -257,4 +263,27 @@ type tsnetServerDestructor struct {
 
 func (t tsnetServerDestructor) Destruct() error {
 	return t.Close()
+}
+
+func (t *tsnetServerDestructor) Listen(network string, addr string) (net.Listener, error) {
+	ln, err := t.Server.Listen(network, addr)
+	if err != nil {
+		return nil, err
+	}
+	serverListener := &tsnetServerListener{
+		hostname: t.Hostname,
+		Listener: ln,
+	}
+	return serverListener, nil
+}
+
+type tsnetServerListener struct {
+	hostname string
+	net.Listener
+}
+
+func (t *tsnetServerListener) Close() error {
+	fmt.Println("Delete", t.hostname)
+	_, err := servers.Delete(t.hostname)
+	return err
 }

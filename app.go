@@ -61,6 +61,7 @@ func (t *TSApp) Start() error {
 }
 
 func (t *TSApp) Stop() error {
+	app = nil
 	return nil
 }
 

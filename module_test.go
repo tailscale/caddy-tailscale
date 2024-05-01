@@ -1,7 +1,9 @@
 package tscaddy
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"testing"
 )
@@ -53,5 +55,32 @@ func Test_GetAuthKey(t *testing.T) {
 				t.Errorf("GetAuthKey() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func Test_Listen(t *testing.T) {
+	svr, err := getServer("", "testhost")
+	if err != nil {
+		t.Fatal("failed to get server", err)
+	}
+
+	ln, err := svr.Listen("tcp", ":80")
+	if err != nil {
+		t.Fatal("failed to listen", err)
+	}
+	count, exists := servers.References("testhost")
+	if !exists && count != 1 {
+		t.Fatal("reference doesn't exist")
+	}
+	ln.Close()
+
+	count, exists = servers.References("testhost")
+	if exists && count != 0 {
+		t.Fatal("reference exists when it shouldn't")
+	}
+
+	err = svr.Close()
+	if !errors.Is(err, net.ErrClosed) {
+		t.Fatal("unexpected error", err)
 	}
 }
