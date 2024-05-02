@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync/atomic"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
@@ -22,6 +23,7 @@ import (
 
 var (
 	servers = caddy.NewUsagePool()
+	tsapp   = atomic.Pointer[TSApp]{}
 )
 
 func init() {
@@ -47,7 +49,10 @@ func getPlainListener(_ context.Context, _ string, addr string, _ net.ListenConf
 		network = "tcp"
 	}
 
-	return s.Listen(network, ":"+port)
+	ln := &tsnetServerDestructor{
+		Server: s.Server,
+	}
+	return ln.Listen(network, ":"+port)
 }
 
 func getTLSListener(_ context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
@@ -105,11 +110,9 @@ func getServer(_, addr string) (*tsnetServerDestructor, error) {
 		}
 
 		if host != "" {
-			// Set authkey to "TS_AUTHKEY_<HOST>".  If empty,
-			// fall back to "TS_AUTHKEY".
-			s.AuthKey = os.Getenv("TS_AUTHKEY_" + strings.ToUpper(host))
-			if s.AuthKey == "" {
-				s.AuthKey = os.Getenv("TS_AUTHKEY")
+			if app := tsapp.Load(); app != nil {
+				s.AuthKey = getAuthKey(host, app)
+				s.Ephemeral = getEphemeral(host, app)
 			}
 
 			// Set config directory for tsnet.  By default, tsnet will use the name of the
@@ -134,6 +137,39 @@ func getServer(_, addr string) (*tsnetServerDestructor, error) {
 	}
 
 	return s.(*tsnetServerDestructor), nil
+}
+
+func getAuthKey(host string, app *TSApp) string {
+	if app == nil {
+		return ""
+	}
+	svr := app.Servers[host]
+	if svr.AuthKey != "" {
+		return svr.AuthKey
+	}
+
+	if app.DefaultAuthKey != "" {
+		return app.DefaultAuthKey
+	}
+
+	// Set authkey to "TS_AUTHKEY_<HOST>".  If empty,
+	// fall back to "TS_AUTHKEY".
+	authKey := os.Getenv("TS_AUTHKEY_" + strings.ToUpper(host))
+	if authKey == "" {
+		authKey = os.Getenv("TS_AUTHKEY")
+	}
+	return authKey
+}
+
+func getEphemeral(host string, app *TSApp) bool {
+	if app == nil {
+		return false
+	}
+	if svr, ok := app.Servers[host]; ok {
+		return svr.Ephemeral
+	}
+
+	return app.Ephemeral
 }
 
 type TailscaleAuth struct {
@@ -233,4 +269,32 @@ type tsnetServerDestructor struct {
 
 func (t tsnetServerDestructor) Destruct() error {
 	return t.Close()
+}
+
+func (t *tsnetServerDestructor) Listen(network string, addr string) (net.Listener, error) {
+	ln, err := t.Server.Listen(network, addr)
+	if err != nil {
+		return nil, err
+	}
+	serverListener := &tsnetServerListener{
+		hostname: t.Hostname,
+		Listener: ln,
+	}
+	return serverListener, nil
+}
+
+type tsnetServerListener struct {
+	hostname string
+	net.Listener
+}
+
+func (t *tsnetServerListener) Close() error {
+	if err := t.Listener.Close(); err != nil {
+		return err
+	}
+
+	// Decrement usage count of server for this hostname.
+	// If usage reaches zero, then the server is actually shutdown.
+	_, err := servers.Delete(t.hostname)
+	return err
 }

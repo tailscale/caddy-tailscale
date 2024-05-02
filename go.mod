@@ -4,6 +4,7 @@ go 1.22.0
 
 require (
 	github.com/caddyserver/caddy/v2 v2.7.3
+	github.com/google/go-cmp v0.6.0
 	go.uber.org/zap v1.26.0
 	tailscale.com v1.62.0
 )
@@ -62,7 +63,6 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/btree v1.1.2 // indirect
 	github.com/google/cel-go v0.15.1 // indirect
-	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/nftables v0.1.1-0.20230115205135-9aa6fdf5a28c // indirect
 	github.com/google/pprof v0.0.0-20230808223545-4887780b67fb // indirect
 	github.com/google/uuid v1.5.0 // indirect
