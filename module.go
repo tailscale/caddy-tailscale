@@ -283,7 +283,10 @@ type tsnetServerListener struct {
 }
 
 func (t *tsnetServerListener) Close() error {
-	fmt.Println("Delete", t.hostname)
+	if err := t.Listener.Close(); err != nil {
+		return err
+	}
+
 	_, err := servers.Delete(t.hostname)
 	return err
 }
