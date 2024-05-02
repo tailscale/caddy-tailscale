@@ -37,7 +37,7 @@ func Test_GetAuthKey(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			app = &TSApp{
+			app := &TSApp{
 				Servers: make(map[string]TSServer),
 			}
 			if !tt.skipApp {

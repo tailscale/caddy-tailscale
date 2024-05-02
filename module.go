@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync/atomic"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
@@ -22,13 +23,10 @@ import (
 
 var (
 	servers = caddy.NewUsagePool()
-	app     *TSApp
+	tsapp   = atomic.Pointer[TSApp]{}
 )
 
 func init() {
-	app = &TSApp{
-		Servers: map[string]TSServer{},
-	}
 	caddy.RegisterModule(TailscaleAuth{})
 	httpcaddyfile.RegisterHandlerDirective("tailscale_auth", parseCaddyfile)
 	caddy.RegisterNetwork("tailscale", getPlainListener)
@@ -112,8 +110,10 @@ func getServer(_, addr string) (*tsnetServerDestructor, error) {
 		}
 
 		if host != "" {
-			s.AuthKey = getAuthKey(host, app)
-			s.Ephemeral = getEphemeral(host, app)
+			if app := tsapp.Load(); app != nil {
+				s.AuthKey = getAuthKey(host, app)
+				s.Ephemeral = getEphemeral(host, app)
+			}
 
 			// Set config directory for tsnet.  By default, tsnet will use the name of the
 			// running program, but we include the hostname as well so that a single
@@ -140,6 +140,9 @@ func getServer(_, addr string) (*tsnetServerDestructor, error) {
 }
 
 func getAuthKey(host string, app *TSApp) string {
+	if app == nil {
+		return ""
+	}
 	svr := app.Servers[host]
 	if svr.AuthKey != "" {
 		return svr.AuthKey
@@ -159,6 +162,9 @@ func getAuthKey(host string, app *TSApp) string {
 }
 
 func getEphemeral(host string, app *TSApp) bool {
+	if app == nil {
+		return false
+	}
 	if svr, ok := app.Servers[host]; ok {
 		return svr.Ephemeral
 	}
@@ -287,6 +293,8 @@ func (t *tsnetServerListener) Close() error {
 		return err
 	}
 
+	// Decrement usage count of server for this hostname.
+	// If usage reaches zero, then the server is actually shutdown.
 	_, err := servers.Delete(t.hostname)
 	return err
 }

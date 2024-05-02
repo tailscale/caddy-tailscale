@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/google/go-cmp/cmp"
@@ -97,10 +96,6 @@ func Test_ParseApp(t *testing.T) {
 			if err := json.Unmarshal([]byte(gotJSON), &app); err != nil {
 				t.Error("failed to unmarshal json into TSApp")
 			}
-			if err := app.Provision(caddy.Context{}); err != nil {
-				t.Error("failed to provision caddy app")
-			}
-
 		})
 	}
 

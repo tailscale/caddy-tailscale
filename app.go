@@ -1,8 +1,6 @@
 package tscaddy
 
 import (
-	"errors"
-
 	"github.com/caddyserver/caddy/v2"
 )
 
@@ -34,34 +32,13 @@ func (TSApp) CaddyModule() caddy.ModuleInfo {
 	}
 }
 
-func (t *TSApp) Provision(ctx caddy.Context) error {
-	for _, svr := range t.Servers {
-		if t.Ephemeral {
-			svr.Ephemeral = t.Ephemeral
-		}
-		if svr.AuthKey == "" {
-			svr.AuthKey = t.DefaultAuthKey
-		}
-	}
-
-	app = t
-
-	return nil
-}
-
-func (t *TSApp) Validate() error {
-	if t.DefaultAuthKey == "" {
-		return errors.New("auth_key must be set")
-	}
-	return nil
-}
-
 func (t *TSApp) Start() error {
+	tsapp.Store(t)
 	return nil
 }
 
 func (t *TSApp) Stop() error {
-	app = nil
+	tsapp.CompareAndSwap(t, nil)
 	return nil
 }
 

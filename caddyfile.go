@@ -11,7 +11,7 @@ func init() {
 }
 
 func parseApp(d *caddyfile.Dispenser, _ any) (any, error) {
-	app = &TSApp{
+	app := &TSApp{
 		Servers: make(map[string]TSServer),
 	}
 	if !d.Next() {
