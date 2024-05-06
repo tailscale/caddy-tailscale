@@ -154,7 +154,9 @@ func getAuthKey(host string, app *TSApp) string {
 	// If empty, fall back to "TS_AUTHKEY".
 	authKey := os.Getenv("TS_AUTHKEY_" + strings.ToUpper(host))
 	if authKey != "" {
-		app.logger.Warn("Relying on TS_AUTHKEY_{HOST} env var is deprecated. Set caddy config instead.", zap.Any("host", host))
+		if app.logger != nil {
+			app.logger.Warn("Relying on TS_AUTHKEY_{HOST} env var is deprecated. Set caddy config instead.", zap.Any("host", host))
+		}
 		return authKey
 	}
 

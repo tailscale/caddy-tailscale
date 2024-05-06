@@ -37,18 +37,22 @@ func (TSApp) CaddyModule() caddy.ModuleInfo {
 
 func (t *TSApp) Provision(ctx caddy.Context) error {
 	t.logger = ctx.Logger(t)
-	return nil
-}
-
-func (t *TSApp) Start() error {
 	tsapp.Store(t)
 	return nil
 }
 
-func (t *TSApp) Stop() error {
+func (t *TSApp) Cleanup() error {
 	tsapp.CompareAndSwap(t, nil)
 	return nil
 }
 
+// Implement the caddy.App interface, but these are no-ops for TSApp,
+// since everything is done in Provision and Cleanup.
+// This ensures the Tailscale config is available early for configuring
+// things like network listeners.
+func (t *TSApp) Start() error { return nil }
+func (t *TSApp) Stop() error  { return nil }
+
 var _ caddy.App = (*TSApp)(nil)
 var _ caddy.Provisioner = (*TSApp)(nil)
+var _ caddy.CleanerUpper = (*TSApp)(nil)
