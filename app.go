@@ -2,6 +2,7 @@ package tscaddy
 
 import (
 	"github.com/caddyserver/caddy/v2"
+	"go.uber.org/zap"
 )
 
 func init() {
@@ -15,6 +16,8 @@ type TSApp struct {
 	Ephemeral bool `json:"ephemeral,omitempty" caddy:"namespace=tailscale.ephemeral"`
 
 	Servers map[string]TSServer `json:"servers,omitempty" caddy:"namespace=tailscale"`
+
+	logger *zap.Logger
 }
 
 type TSServer struct {
@@ -32,6 +35,11 @@ func (TSApp) CaddyModule() caddy.ModuleInfo {
 	}
 }
 
+func (t *TSApp) Provision(ctx caddy.Context) error {
+	t.logger = ctx.Logger(t)
+	return nil
+}
+
 func (t *TSApp) Start() error {
 	tsapp.Store(t)
 	return nil
@@ -43,3 +51,4 @@ func (t *TSApp) Stop() error {
 }
 
 var _ caddy.App = (*TSApp)(nil)
+var _ caddy.Provisioner = (*TSApp)(nil)

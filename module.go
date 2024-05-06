@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -17,6 +16,7 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp/caddyauth"
+	"go.uber.org/zap"
 	"tailscale.com/client/tailscale"
 	"tailscale.com/tsnet"
 )
@@ -101,10 +101,8 @@ func getServer(_, addr string) (*tsnetServerDestructor, error) {
 		s := &tsnet.Server{
 			Hostname: host,
 			Logf: func(format string, args ...any) {
-				// TODO: parse out and always log authURL so you don't need
-				// to turn on debug logging to get it.
-				if os.Getenv("TS_VERBOSE") == "1" {
-					log.Printf(format, args...)
+				if app := tsapp.Load(); app != nil {
+					app.logger.Sugar().Debugf(format, args...)
 				}
 			},
 		}
@@ -152,13 +150,15 @@ func getAuthKey(host string, app *TSApp) string {
 		return app.DefaultAuthKey
 	}
 
-	// Set authkey to "TS_AUTHKEY_<HOST>".  If empty,
-	// fall back to "TS_AUTHKEY".
+	// Set authkey to "TS_AUTHKEY_<HOST>".
+	// If empty, fall back to "TS_AUTHKEY".
 	authKey := os.Getenv("TS_AUTHKEY_" + strings.ToUpper(host))
-	if authKey == "" {
-		authKey = os.Getenv("TS_AUTHKEY")
+	if authKey != "" {
+		app.logger.Warn("Relying on TS_AUTHKEY_{HOST} env var is deprecated. Set caddy config instead.", zap.Any("host", host))
+		return authKey
 	}
-	return authKey
+
+	return os.Getenv("TS_AUTHKEY")
 }
 
 func getEphemeral(host string, app *TSApp) bool {
