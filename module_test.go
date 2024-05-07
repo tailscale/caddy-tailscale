@@ -2,9 +2,7 @@ package tscaddy
 
 import (
 	"errors"
-	"fmt"
 	"net"
-	"strings"
 	"testing"
 
 	"github.com/caddyserver/caddy/v2"
@@ -12,49 +10,70 @@ import (
 )
 
 func Test_GetAuthKey(t *testing.T) {
-
-	const testkey = "abcdefghijklmnopqrstuvwxyz"
-	const testHostKey = "1234567890"
-	const testenvkey = "zyxwvutsrqponmlkjihgfedca"
-	const testHost = "unittest"
-
+	const host = "host"
 	tests := map[string]struct {
-		host    string
-		skipApp bool
-		want    string
+		env        map[string]string // env vars to set
+		defaultKey string            // default key in caddy config
+		hostKey    string            // host key in caddy config
+		want       string
 	}{
 		"default key from environment": {
-			want:    testenvkey,
-			skipApp: true,
-			host:    "testhost",
+			env:  map[string]string{"TS_AUTHKEY": "envkey"},
+			want: "envkey",
 		},
-		"host key from module": {
-			want: testHostKey,
-			host: testHost,
+		"default key from caddy": {
+			env:        map[string]string{"TS_AUTHKEY": "envkey"},
+			defaultKey: "defaultkey",
+			want:       "defaultkey",
+		},
+		"default key from caddy placeholder": {
+			env: map[string]string{
+				"TS_AUTHKEY": "envkey",
+				"MYKEY":      "mykey",
+			},
+			defaultKey: "{env.MYKEY}",
+			want:       "mykey",
 		},
 		"host key from environment": {
-			want:    testHostKey,
-			skipApp: true,
-			host:    testHost,
+			env:  map[string]string{"TS_AUTHKEY_HOST": "envhostkey"},
+			want: "envhostkey",
+		},
+		"host key from caddy": {
+			env:     map[string]string{"TS_AUTHKEY": "envkey"},
+			hostKey: "hostkey",
+			want:    "hostkey",
+		},
+		"host key from caddy placeholder": {
+			env:     map[string]string{"MYKEY": "mykey"},
+			hostKey: "{env.MYKEY}",
+			want:    "mykey",
+		},
+		"empty key from empty env var": {
+			hostKey: "{env.DOES_NOT_EXIST}",
+			want:    "",
+		},
+		"empty key from bad placeholder": {
+			hostKey: "{bad.placeholder}",
+			want:    "",
 		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			app := &TSApp{
-				Servers: make(map[string]TSServer),
+				DefaultAuthKey: tt.defaultKey,
+				Servers:        make(map[string]TSServer),
 			}
 			app.Provision(caddy.Context{})
-			if !tt.skipApp {
-				app.DefaultAuthKey = testkey
-				app.Servers[testHost] = TSServer{
-					AuthKey: testHostKey,
+			if tt.hostKey != "" {
+				app.Servers[host] = TSServer{
+					AuthKey: tt.hostKey,
 				}
 			}
-			t.Setenv("TS_AUTHKEY", testenvkey)
-			hostKey := fmt.Sprintf("TS_AUTHKEY_%s", strings.ToUpper(testHost))
-			t.Setenv(hostKey, testHostKey)
+			for k, v := range tt.env {
+				t.Setenv(k, v)
+			}
 
-			got := getAuthKey(tt.host, app)
+			got, _ := getAuthKey(host, app)
 			if got != tt.want {
 				t.Errorf("GetAuthKey() = %v, want %v", got, tt.want)
 			}

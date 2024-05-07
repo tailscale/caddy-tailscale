@@ -118,7 +118,9 @@ func getServer(ctx caddy.Context, addr string) (*tsnetServerDestructor, error) {
 		}
 
 		if host != "" {
-			s.AuthKey = getAuthKey(host, app)
+			if s.AuthKey, err = getAuthKey(host, app); err != nil {
+				app.logger.Warn("error parsing auth key", zap.Error(err))
+			}
 			s.Ephemeral = getEphemeral(host, app)
 
 			// Set config directory for tsnet.  By default, tsnet will use the name of the
@@ -145,17 +147,20 @@ func getServer(ctx caddy.Context, addr string) (*tsnetServerDestructor, error) {
 	return s.(*tsnetServerDestructor), nil
 }
 
-func getAuthKey(host string, app *TSApp) string {
+var repl = caddy.NewReplacer()
+
+func getAuthKey(host string, app *TSApp) (string, error) {
 	if app == nil {
-		return ""
+		return "", nil
 	}
+
 	svr := app.Servers[host]
 	if svr.AuthKey != "" {
-		return svr.AuthKey
+		return repl.ReplaceOrErr(svr.AuthKey, true, true)
 	}
 
 	if app.DefaultAuthKey != "" {
-		return app.DefaultAuthKey
+		return repl.ReplaceOrErr(app.DefaultAuthKey, true, true)
 	}
 
 	// Set authkey to "TS_AUTHKEY_<HOST>".
@@ -163,10 +168,10 @@ func getAuthKey(host string, app *TSApp) string {
 	authKey := os.Getenv("TS_AUTHKEY_" + strings.ToUpper(host))
 	if authKey != "" {
 		app.logger.Warn("Relying on TS_AUTHKEY_{HOST} env var is deprecated. Set caddy config instead.", zap.Any("host", host))
-		return authKey
+		return authKey, nil
 	}
 
-	return os.Getenv("TS_AUTHKEY")
+	return os.Getenv("TS_AUTHKEY"), nil
 }
 
 func getEphemeral(host string, app *TSApp) bool {
