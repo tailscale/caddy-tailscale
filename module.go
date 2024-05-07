@@ -107,6 +107,10 @@ func getServer(_, addr string) (*tsnetServerDestructor, error) {
 			},
 		}
 
+		if tsapp.Load() == nil {
+			panic("tsapp is nil")
+		}
+
 		if host != "" {
 			if app := tsapp.Load(); app != nil {
 				s.AuthKey = getAuthKey(host, app)

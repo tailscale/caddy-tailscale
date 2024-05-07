@@ -1,4 +1,5 @@
 {
+	debug
 	order tailscale_auth after basicauth
 	tailscale {
 		auth_key "tskey-auth-"
@@ -14,5 +15,5 @@
 	root .
 	file_server
 	templates
-	tailscale_auth
+	#tailscale_auth
 }
