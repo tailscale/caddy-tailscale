@@ -41,12 +41,10 @@ func (t *TSApp) Provision(ctx caddy.Context) error {
 }
 
 func (t *TSApp) Start() error {
-	tsapp.Store(t)
 	return nil
 }
 
 func (t *TSApp) Stop() error {
-	tsapp.CompareAndSwap(t, nil)
 	return nil
 }
 

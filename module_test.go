@@ -6,6 +6,8 @@ import (
 	"net"
 	"strings"
 	"testing"
+
+	"github.com/caddyserver/caddy/v2"
 )
 
 func Test_GetAuthKey(t *testing.T) {
@@ -59,7 +61,7 @@ func Test_GetAuthKey(t *testing.T) {
 }
 
 func Test_Listen(t *testing.T) {
-	svr, err := getServer("", "testhost")
+	svr, err := getServer(caddy.Context{}, "", "testhost")
 	if err != nil {
 		t.Fatal("failed to get server", err)
 	}

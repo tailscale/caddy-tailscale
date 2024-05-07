@@ -9,7 +9,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"sync/atomic"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
@@ -21,10 +20,7 @@ import (
 	"tailscale.com/tsnet"
 )
 
-var (
-	servers = caddy.NewUsagePool()
-	tsapp   = atomic.Pointer[TSApp]{}
-)
+var servers = caddy.NewUsagePool()
 
 func init() {
 	caddy.RegisterModule(TailscaleAuth{})
@@ -34,13 +30,18 @@ func init() {
 	caddy.RegisterModule(&TailscaleCaddyTransport{})
 }
 
-func getPlainListener(_ context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
+func getPlainListener(c context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
+	ctx, ok := c.(caddy.Context)
+	if !ok {
+		return nil, fmt.Errorf("context is not a caddy.Context: %T", c)
+	}
+
 	network, host, port, err := caddy.SplitNetworkAddress(addr)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := getServer("", host)
+	s, err := getServer(ctx, "", host)
 	if err != nil {
 		return nil, err
 	}
@@ -55,13 +56,18 @@ func getPlainListener(_ context.Context, _ string, addr string, _ net.ListenConf
 	return ln.Listen(network, ":"+port)
 }
 
-func getTLSListener(_ context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
+func getTLSListener(c context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
+	ctx, ok := c.(caddy.Context)
+	if !ok {
+		return nil, fmt.Errorf("context is not a caddy.Context: %T", c)
+	}
+
 	network, host, port, err := caddy.SplitNetworkAddress(addr)
 	if err != nil {
 		return nil, err
 	}
 
-	s, err := getServer("", host)
+	s, err := getServer(ctx, "", host)
 	if err != nil {
 		return nil, err
 	}
@@ -91,31 +97,29 @@ func getTLSListener(_ context.Context, _ string, addr string, _ net.ListenConfig
 //
 // Auth keys can be provided in environment variables of the form TS_AUTHKEY_<HOST>.  If
 // no host is specified in the address, the environment variable TS_AUTHKEY will be used.
-func getServer(_, addr string) (*tsnetServerDestructor, error) {
+func getServer(ctx caddy.Context, _, addr string) (*tsnetServerDestructor, error) {
 	_, host, _, err := caddy.SplitNetworkAddress(addr)
 	if err != nil {
 		return nil, err
 	}
 
+	appIface, err := ctx.App("tailscale")
+	if err != nil {
+		return nil, err
+	}
+	app := appIface.(*TSApp)
+
 	s, _, err := servers.LoadOrNew(host, func() (caddy.Destructor, error) {
 		s := &tsnet.Server{
 			Hostname: host,
 			Logf: func(format string, args ...any) {
-				if app := tsapp.Load(); app != nil {
-					app.logger.Sugar().Debugf(format, args...)
-				}
+				app.logger.Sugar().Debugf(format, args...)
 			},
 		}
 
-		if tsapp.Load() == nil {
-			panic("tsapp is nil")
-		}
-
 		if host != "" {
-			if app := tsapp.Load(); app != nil {
-				s.AuthKey = getAuthKey(host, app)
-				s.Ephemeral = getEphemeral(host, app)
-			}
+			s.AuthKey = getAuthKey(host, app)
+			s.Ephemeral = getEphemeral(host, app)
 
 			// Set config directory for tsnet.  By default, tsnet will use the name of the
 			// running program, but we include the hostname as well so that a single

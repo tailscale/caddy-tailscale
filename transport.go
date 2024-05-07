@@ -21,7 +21,7 @@ func (t *TailscaleCaddyTransport) UnmarshalCaddyfile(d *caddyfile.Dispenser) err
 func (t *TailscaleCaddyTransport) Provision(context caddy.Context) error {
 	t.logger = context.Logger()
 
-	s, err := getServer("", "caddy-tsnet-client:80")
+	s, err := getServer(caddy.Context{}, "", "caddy-tsnet-client:80")
 	if err != nil {
 		return err
 	}
