@@ -1,40 +1,133 @@
-# Tailscale Caddy plugin
+# Tailscale plugin for Caddy
 
 [![status: experimental](https://img.shields.io/badge/status-experimental-blue)](https://tailscale.com/kb/1167/release-stages/#experimental)
 
-The Tailscale Caddy plugin brings Tailscale integration to the Caddy web server.
-It's really multiple plugins in one, providing:
+The Tailscale plugin for Caddy brings Tailscale integration to the Caddy web server.
+It's really a collection of plugins, providing:
 
-- the ability for a Caddy server to directly join your Tailscale network
-  without needing a separate Tailscale client.
-- a Caddy authentication provider, so that you can pass a user's Tailscale
-  identity to an applicatiton.
-- a Caddy subcommand to quickly setup a reverse-proxy using either or both of
-  the network listener or authentication provider.
+- the ability for a Caddy server to directly join your Tailscale network without needing a separate Tailscale client
+- a Caddy network listener, to serve sites privately on your tailnet
+- a Caddy proxy transport, to proxy requests to another device on your tailnet
+- a Caddy authentication provider, to pass a user's Tailscale identity to an application
+- a Caddy subcommand, to quickly setup a reverse-proxy using either or both of the network listener or authentication provider
 
 This plugin is still very experimental.
 
 ## Installation
 
-Use [xcaddy](https://github.com/caddyserver/xcaddy) to build Caddy with the
-Tailscale plugin included.
+Use [xcaddy](https://github.com/caddyserver/xcaddy) to build Caddy with the Tailscale plugin included.
 
 ```
 xcaddy build v2.7.6 --with github.com/tailscale/caddy-tailscale
 ```
 
-## Caddy network listener
+## Configuration
 
-New in Caddy 2.6, modules are able to provide custom network listeners. This
-allows your Caddy server to directly join your Tailscale network without needing
-a separate Tailcale client running on the machine exposing a network device.
-Each site can be configured in Caddy to join your network as a separate node, or
-you can have multiple sites listening on different ports of a single node.
+In a [Caddyfile], use the `tailscale` [global option] to configure your Tailscale nodes.
+Most options can be set at the top-level, in which case they will apply to all nodes.
+They can also be set for a specific named node, which override the top-level options.
+Named node configurations can be referenced elsewhere in the caddy configuration.
 
-### Configuration
+The `tailscale` global option only defines configuration values for Tailscale nodes.
+Nodes are not actually registered and connected to your tailnet until they are used,
+such as listening on the node's interface or using it as a proxy transport.
 
-Configure Caddy to listen on a special "tailscale" network address. If using a
-Caddyfile, use the [bind directive](https://caddyserver.com/docs/caddyfile/directives/bind):
+String options support the use of [placeholders] to populate values dynamically,
+such as from an environment variable.
+
+Supported options are:
+
+```caddyfile
+{
+    tailscale {
+        # Tailscale auth key used to register nodes.
+        auth_key <auth_key>
+
+        # Alternate control server URL. Leave empty to use the default server.
+        control_url <control_url>
+
+        # If true, register ephemeral nodes that are removed after disconnect.
+        # Default: false
+        ephemeral true|false
+
+        # Directory to store Tailscale state in. A subdirectory will be created for each node.
+        # The default is to store state in the user's config dir (see os.UserConfDir).
+        state_dir <filepath>
+
+        # If true, run the Tailscale web UI for remotely managing the node. (https://tailscale.com/kb/1325)
+        # Default: false
+        webui true|false
+
+        # Any number of named node configs can be specified to override global options.
+        <node_name> {
+          # Tailscale auth key used to register this node.
+          auth_key <auth_key>
+
+          # Alternate control server URL.
+          control_url <control_url>
+
+          # If true, remove this node after disconnect.
+          ephemeral true|false
+
+          # Hostname to request when registering this node.
+          # Default: <node_name> used for this node configuration
+          hostname <hostname>
+
+          # Directory to store Tailscale state in for this node. No subdirectory is created.
+          state_dir <filepath>
+
+          # If true, run the Tailscale web UI for remotely managing this node.
+          webui true|false
+        }
+    }
+}
+```
+
+All configuration values are optional, though an [auth key] is strongly recommended.
+If no auth key is present, one will be loaded from the default `$TS_AUTHKEY` environment variable.
+Failing that, it will log an auth URL to the Caddy log at `DEBUG` level.
+Because these logs can be quite noisy, they must be enabled with the [debug option]
+or with a [named logger]:
+
+```caddyfile
+{
+  log tailscale {
+    output stdout
+    level DEBUG
+    include tailscale
+  }
+}
+```
+
+After the node had been added to your network, you can restart Caddy without the debug logging.
+Unless the node is registered as `ephemeral`, the auth key is only needed on first run.
+Node state is stored in `state_dir` and reused when Caddy restarts.
+
+For Caddy [JSON config], add the `tailscale` app with fields from [tscaddy.App]:
+
+```json
+{
+  "apps": {
+    "tailscale": {
+      ...
+    }
+  }
+}
+```
+
+[Caddyfile]: https://caddyserver.com/docs/caddyfile
+[global option]: https://caddyserver.com/docs/caddyfile/options
+[placeholders]: https://caddyserver.com/docs/conventions#placeholders
+[auth key]: https://tailscale.com/kb/1085/auth-keys/
+[debug option]: https://caddyserver.com/docs/caddyfile/options#debug
+[named logger]: https://caddyserver.com/docs/caddyfile/options#log
+[JSON config]: https://caddyserver.com/docs/json/
+[tscaddy.App]: https://pkg.go.dev/github.com/tailscale/caddy-tailscale#App
+
+## Network listener
+
+The provided network listener allows privately serving sites on your tailnet.
+Configure a site block as usual, and use the [bind] directive to specify a tailscale network address:
 
 ```
 :80 {
@@ -42,16 +135,18 @@ Caddyfile, use the [bind directive](https://caddyserver.com/docs/caddyfile/direc
 }
 ```
 
-You can also specify a hostname to use for the Tailscale node:
+You can also specify a named node configuration to use for the Tailscale node:
 
 ```
 :80 {
-    bind tailscale/myhost
+    bind tailscale/myapp
 }
 ```
 
-If using the Caddy JSON configuration, specify a "tailscale/" network in your
-listen address:
+If no node configuration is specified, a default configuration will be used,
+which names the node based on the name of the running binary (typically, `caddy`).
+
+If using the Caddy JSON configuration, specify a "tailscale/" network in your listen address:
 
 ```json
 {
@@ -67,13 +162,12 @@ listen address:
 }
 ```
 
-Caddy will join your Tailscale network and listen only on that network
-interface. Multiple addresses can be specified if you want to listen on the
-Tailscale address as well as a local address:
+Caddy will join your Tailscale network and listen only on that network interface.
+Multiple addresses can be specified if you want to listen on different Tailscale nodes as well as a local address:
 
 ```
 :80 {
-  bind tailscale/myhost localhost
+  bind tailscale/myhost tailscale/my-other-host localhost
 }
 ```
 
@@ -81,27 +175,35 @@ Different sites can be configured to join the network as different nodes:
 
 ```
 :80 {
-  bind tailscale/a
+  bind tailscale/myhost
 }
 
 :80 {
-  bind tailscale/b
+  bind tailscale/my-other-host
 }
 ```
 
-However, having a single Caddy site connect to separate Tailscale nodes doesn't
-quite work correctly. If this is something you actually need, please open an
-issue.
+Or they can be served on different ports of the same Tailscale node:
+
+```
+:80 {
+  bind tailscale/myhost
+}
+
+:8080 {
+  bind tailscale/myhost
+}
+```
+
+[bind]: https://caddyserver.com/docs/caddyfile/directives/bind
 
 ### HTTPS support
 
-At this time, the Tailscale plugin for Caddy doesn't support using Caddy's
-native HTTPS resolvers. You will need to use the `tailscale+tls` bind protocol
-with a configuration like this:
+At this time, the Tailscale plugin for Caddy doesn't support using Caddy's native HTTPS resolvers.
+You will need to use the `tailscale+tls` bind protocol with a configuration like this:
 
 ```
 {
-    order tailscale_auth after basicauth
     auto_https off
 }
 
@@ -110,50 +212,21 @@ with a configuration like this:
 }
 ```
 
-Please note that because you currently need to turn `auto_https` support off, it
-is not advised to use the same instance of Caddy for your external-facing apps
-as you use for your internal-facing apps. This deficiency will be resolved as
-soon as possible.
+Please note that because you currently need to turn `auto_https` support off,
+you may want to run a separate Caddy instance for sites that do need `auto_https`.
 
-### Authenticating to the Tailcale network
-
-New nodes can be added to your Tailscale network by providing an [Auth
-key](https://tailscale.com/kb/1085/auth-keys/) or by following a special URL.
-Auth keys are provided to Caddy via the `TS_AUTHKEY` or `TS_AUTHKEY_<HOST>`
-environment variable. So if your network listener was `tailscale/myhost`, then
-it would look first for the `TS_AUTHKEY_MYHOST` environment variable, then
-`TS_AUTHKEY`.
-
-If no auth key is provided, then Tailscale will generate a URL that can be used
-to add the new node and print it to the Caddy log.
-Tailscale logs can be somewhat noisy so are turned off by default.
-Set the log level for the tailscale module to DEBUG to see the URL with [a Caddy logger](https://caddyserver.com/docs/caddyfile/options#log) like this:
-
-```yaml
-{
-  log tailscale {
-    output stdout
-    level DEBUG
-    include tailscale
-  }
-}
-```
-After the node had been added to your network, you can restart Caddy without the custom debug logger for tailscale.
-
-## Caddy authentication provider
+## Authentication provider
 
 Setup the Tailscale authentication provider with `tailscale_auth` directive.
-The provider will enforce that all requests are coming from a Tailscale user, as
-well as set various fields on the Caddy user object that can be passed to
-applications, similar to [nginx-auth][].
+The provider will enforce that all requests are coming from a Tailscale user,
+as well as set various fields on the Caddy user object that can be passed to applications.
+For sites listening only on the Tailscale network interface,
+user access will already be enforced by the tailnet access controls.
 
-[nginx-auth]: https://github.com/tailscale/tailscale/tree/main/cmd/nginx-auth
+Set the [order] directive in your global options to instruct Caddy when to process `tailscale_auth`.
+For example, in a Caddyfile:
 
-Set the [`order`](https://caddyserver.com/docs/caddyfile/options#order)
-directive in your global options to instruct Caddy when to process
-`tailscale_auth`. For example, in a Caddyfile:
-
-```
+```caddyfile
 {
   order tailscale_auth after basicauth
 }
@@ -172,18 +245,45 @@ The following fields are set on the Caddy user object:
 - `user.tailscale_profile_picture`: the URL of the Tailscale user's profile picture
 - `user.tailscale_tailnet`: the name of the Tailscale network the user is a member of
 
-These can be mapped to HTTP headers passed to an application using something
-like the following in your Caddyfile:
+These values can be mapped to HTTP headers that are then passed to
+an application that supports proxy authentication such as [Gitea] or [Grafana].
+You might have something like the following in your Caddyfile:
 
-```
-header_up X-Webauth-User {http.auth.user.tailscale_login}
-header_up X-Webauth-Email {http.auth.user.tailscale_user}
-header_up X-Webauth-Name {http.auth.user.tailscale_name}
+```caddyfile
+:80 {
+  bind tailscale/gitea
+  tailscale_auth
+  reverse_proxy http://localhost:3000 {
+    header_up X-Webauth-User {http.auth.user.tailscale_login}
+    header_up X-Webauth-Email {http.auth.user.tailscale_user}
+    header_up X-Webauth-Name {http.auth.user.tailscale_name}
+  }
+}
 ```
 
-When used with a Tailscale listener (described above), that Tailscale connection
-is used to identify the remote user. Otherwise, the authentication provider
-will attempt to connect to the Tailscale daemon running on the local machine.
+When used with a Tailscale listener (described above), that Tailscale node is used to identify the remote user.
+Otherwise, the authentication provider will attempt to connect to the Tailscale daemon running on the local machine.
+
+[order]: https://caddyserver.com/docs/caddyfile/options#order
+[Gitea]: https://docs.gitea.com/usage/authentication#reverse-proxy
+[Grafana]: https://grafana.com/docs/grafana/latest/setup-grafana/configure-security/configure-authentication/auth-proxy/
+
+## Proxy Transport
+
+The `tailscale` proxy transport allows using a Tailscale node to connect to a reverse proxy upstream.
+This might be useful proxy non-Tailscale traffic to node on your tailnet, similar to [Funnel].
+
+You can specify a named node configuration, or a default `caddy-proxy` node will be used.
+
+```caddyfile
+:8080 {
+  reverse_proxy http://my-other-node:10000 {
+    transport tailscale myhost
+  }
+}
+```
+
+[Funnel]: https://tailscale.com/kb/1223/funnel
 
 ## tailscale-proxy subcommand
 
@@ -196,3 +296,5 @@ For example:
 ```
 xcaddy tailscale-proxy --from "tailscale/myhost:80" --to localhost:8000
 ```
+
+(The `tailscale-proxy` subcommand does not yet work with the tailscale proxy transport.)
