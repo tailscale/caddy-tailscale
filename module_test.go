@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/caddyserver/caddy/v2"
+	"tailscale.com/util/must"
 )
 
 func Test_GetAuthKey(t *testing.T) {
@@ -42,6 +43,7 @@ func Test_GetAuthKey(t *testing.T) {
 			app := &TSApp{
 				Servers: make(map[string]TSServer),
 			}
+			app.Provision(caddy.Context{})
 			if !tt.skipApp {
 				app.DefaultAuthKey = testkey
 				app.Servers[testHost] = TSServer{
@@ -61,7 +63,10 @@ func Test_GetAuthKey(t *testing.T) {
 }
 
 func Test_Listen(t *testing.T) {
-	svr, err := getServer(caddy.Context{}, "", "testhost")
+	must.Do(caddy.Run(new(caddy.Config)))
+	ctx := caddy.ActiveContext()
+
+	svr, err := getServer(ctx, "testhost")
 	if err != nil {
 		t.Fatal("failed to get server", err)
 	}

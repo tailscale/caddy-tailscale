@@ -41,7 +41,7 @@ func getPlainListener(c context.Context, _ string, addr string, _ net.ListenConf
 		return nil, err
 	}
 
-	s, err := getServer(ctx, "", host)
+	s, err := getServer(ctx, host)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func getTLSListener(c context.Context, _ string, addr string, _ net.ListenConfig
 		return nil, err
 	}
 
-	s, err := getServer(ctx, "", host)
+	s, err := getServer(ctx, host)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func getTLSListener(c context.Context, _ string, addr string, _ net.ListenConfig
 //
 // Auth keys can be provided in environment variables of the form TS_AUTHKEY_<HOST>.  If
 // no host is specified in the address, the environment variable TS_AUTHKEY will be used.
-func getServer(ctx caddy.Context, _, addr string) (*tsnetServerDestructor, error) {
+func getServer(ctx caddy.Context, addr string) (*tsnetServerDestructor, error) {
 	_, host, _, err := caddy.SplitNetworkAddress(addr)
 	if err != nil {
 		return nil, err
