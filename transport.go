@@ -18,10 +18,10 @@ func (t *TailscaleCaddyTransport) UnmarshalCaddyfile(d *caddyfile.Dispenser) err
 	return nil
 }
 
-func (t *TailscaleCaddyTransport) Provision(context caddy.Context) error {
-	t.logger = context.Logger()
+func (t *TailscaleCaddyTransport) Provision(ctx caddy.Context) error {
+	t.logger = ctx.Logger()
 
-	s, err := getServer("", "caddy-tsnet-client:80")
+	s, err := getServer(ctx, "caddy-tsnet-client:80")
 	if err != nil {
 		return err
 	}
