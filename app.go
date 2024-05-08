@@ -47,6 +47,9 @@ type Node struct {
 	// Ephemeral specifies whether the node should be registered as ephemeral.
 	Ephemeral bool `json:"ephemeral,omitempty" caddy:"namespace=tailscale.ephemeral"`
 
+	// Hostname is the hostname to use when registering the node.
+	Hostname string `json:"hostname,omitempty" caddy:"namespace=tailscale.hostname"`
+
 	name string
 }
 
@@ -137,6 +140,11 @@ func parseNodeConfig(d *caddyfile.Dispenser) (Node, error) {
 			node.ControlURL = segment.Val()
 		case "ephemeral":
 			node.Ephemeral = true
+		case "hostname":
+			if !segment.NextArg() {
+				return node, segment.ArgErr()
+			}
+			node.Hostname = segment.Val()
 		default:
 			return node, segment.Errf("unrecognized subdirective: %s", segment.Val())
 		}
