@@ -44,6 +44,33 @@ func Test_ParseApp(t *testing.T) {
 			authKey: "",
 		},
 		{
+			name: "ephemeral: true",
+			d: caddyfile.NewTestDispenser(`
+				tailscsale {
+					ephemeral true
+				}`),
+			want:    `{"ephemeral":true}`,
+			authKey: "",
+		},
+		{
+			name: "ephemeral: 1",
+			d: caddyfile.NewTestDispenser(`
+				tailscsale {
+					ephemeral 1
+				}`),
+			want:    `{"ephemeral":true}`,
+			authKey: "",
+		},
+		{
+			name: "ephemeral: false",
+			d: caddyfile.NewTestDispenser(`
+				tailscsale {
+					ephemeral false
+				}`),
+			want:    `{}`, // no value because omitempty
+			authKey: "",
+		},
+		{
 			name: "missing auth key",
 			d: caddyfile.NewTestDispenser(`
 				tailscsale {
@@ -66,9 +93,11 @@ func Test_ParseApp(t *testing.T) {
 					auth_key tskey-default
 					foo {
 						auth_key tskey-node
+						ephemeral false
+						webui false
 					}
 				}`),
-			want:    `{"auth_key":"tskey-default","nodes":{"foo":{"auth_key":"tskey-node"}}}`,
+			want:    `{"auth_key":"tskey-default","nodes":{"foo":{"auth_key":"tskey-node","ephemeral":false,"webui":false}}}`,
 			wantErr: false,
 			authKey: "tskey-node",
 		},

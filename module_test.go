@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/caddyserver/caddy/v2"
+	"tailscale.com/types/opt"
 	"tailscale.com/util/must"
 )
 
@@ -136,6 +137,39 @@ func Test_GetControlURL(t *testing.T) {
 		})
 	}
 }
+
+func Test_GetEphemeral(t *testing.T) {
+	app := &App{
+		Ephemeral: true,
+		Nodes: map[string]Node{
+			"empty":         {},
+			"ephemeral":     {Ephemeral: opt.NewBool(true)},
+			"not-ephemeral": {Ephemeral: opt.NewBool(false)},
+		},
+	}
+	app.Provision(caddy.Context{})
+
+	// node without named config gets the app-level ephemeral setting
+	if got, want := getEphemeral("noconfig", app), true; got != want {
+		t.Errorf("GetEphemeral() = %v, want %v", got, want)
+	}
+
+	// with an empty config, it should return the app-level ephemeral setting
+	if got, want := getEphemeral("empty", app), true; got != want {
+		t.Errorf("GetEphemeral() = %v, want %v", got, want)
+	}
+
+	// explicit node-level true ephemeral setting
+	if got, want := getEphemeral("ephemeral", app), true; got != want {
+		t.Errorf("GetEphemeral() = %v, want %v", got, want)
+	}
+
+	// explicit node-level false ephemeral setting
+	if got, want := getEphemeral("not-ephemeral", app), false; got != want {
+		t.Errorf("GetEphemeral() = %v, want %v", got, want)
+	}
+}
+
 func Test_GetHostname(t *testing.T) {
 	const nodeName = "node"
 	tests := map[string]struct {
@@ -171,6 +205,38 @@ func Test_GetHostname(t *testing.T) {
 				t.Errorf("GetHostname() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func Test_GetWebUI(t *testing.T) {
+	app := &App{
+		WebUI: true,
+		Nodes: map[string]Node{
+			"empty":    {},
+			"webui":    {WebUI: opt.NewBool(true)},
+			"no-webui": {WebUI: opt.NewBool(false)},
+		},
+	}
+	app.Provision(caddy.Context{})
+
+	// node without named config gets the app-level webui setting
+	if got, want := getWebUI("noconfig", app), true; got != want {
+		t.Errorf("GetWebUI() = %v, want %v", got, want)
+	}
+
+	// with an empty config, it should return the app-level webui setting
+	if got, want := getWebUI("empty", app), true; got != want {
+		t.Errorf("GetWebUI() = %v, want %v", got, want)
+	}
+
+	// explicit node-level true webui setting
+	if got, want := getWebUI("webui", app), true; got != want {
+		t.Errorf("GetWebUI() = %v, want %v", got, want)
+	}
+
+	// explicit node-level false webui setting
+	if got, want := getWebUI("no-webui", app), false; got != want {
+		t.Errorf("GetWebUI() = %v, want %v", got, want)
 	}
 }
 
