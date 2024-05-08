@@ -21,7 +21,6 @@ import (
 func init() {
 	caddy.RegisterNetwork("tailscale", getPlainListener)
 	caddy.RegisterNetwork("tailscale+tls", getTLSListener)
-	caddy.RegisterModule(&TailscaleCaddyTransport{})
 }
 
 func getPlainListener(c context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
@@ -211,8 +210,8 @@ func (t *tsnetServerListener) Close() error {
 		return err
 	}
 
-	// Decrement usage count of server for this hostname.
-	// If usage reaches zero, then the server is actually shutdown.
+	// Decrement usage count of this node.
+	// If usage reaches zero, then the node is actually shutdown.
 	_, err := nodes.Delete(t.name)
 	return err
 }

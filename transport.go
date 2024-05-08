@@ -1,66 +1,77 @@
 package tscaddy
 
-// transport.go contains the TailscaleCaddyTransport module.
+// transport.go contains the Transport module.
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
-	"go.uber.org/zap"
 )
 
-// TailscaleCaddyTransport is a caddy transport that uses a tailscale node to make requests.
-type TailscaleCaddyTransport struct {
-	logger *zap.Logger
-	node   *tailscaleNode
+func init() {
+	caddy.RegisterModule(&Transport{})
 }
 
-func (t *TailscaleCaddyTransport) CaddyModule() caddy.ModuleInfo {
+// Transport is a caddy transport that uses a tailscale node to make requests.
+type Transport struct {
+	Name string `json:"name,omitempty"`
+
+	node *tailscaleNode
+}
+
+func (t *Transport) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
-		ID: "http.reverse_proxy.transport.tailscale",
-		New: func() caddy.Module {
-			return new(TailscaleCaddyTransport)
-		},
+		ID:  "http.reverse_proxy.transport.tailscale",
+		New: func() caddy.Module { return new(Transport) },
 	}
 }
 
-func (t *TailscaleCaddyTransport) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
-	return nil
-}
+// UnmarshalCaddyfile populates a Transport config from a caddyfile.
+//
+// We only support a single token identifying the name of a node in the TSApp config.
+// For example:
+//
+//	reverse_proxy {
+//	  transport tailscale my-node
+//	}
+//
+// If a node name is not specified, a default name is used.
+func (t *Transport) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
+	const defaultNodeName = "caddy-proxy"
 
-func (t *TailscaleCaddyTransport) Provision(ctx caddy.Context) error {
-	t.logger = ctx.Logger()
-
-	// TODO(will): allow users to specify a node name used to lookup that node's config in TSApp.
-	s, err := getNode(ctx, "caddy-tsnet-client")
-	if err != nil {
-		return err
+	d.Next() // skip transport name
+	if d.NextArg() {
+		t.Name = d.Val()
+	} else {
+		t.Name = defaultNodeName
 	}
-
-	s.Ephemeral = true
-	s.Logf = func(format string, args ...any) {
-		t.logger.Debug(fmt.Sprintf(format, args))
-	}
-
-	if err := s.Start(); err != nil {
-		return err
-	}
-	t.node = s
 
 	return nil
 }
 
-func (t *TailscaleCaddyTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	if request.URL.Scheme == "" {
-		request.URL.Scheme = "http"
+func (t *Transport) Provision(ctx caddy.Context) error {
+	var err error
+	t.node, err = getNode(ctx, t.Name)
+	return err
+}
+
+func (t *Transport) Cleanup() error {
+	// Decrement usage count of this node.
+	_, err := nodes.Delete(t.Name)
+	return err
+}
+
+func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.Scheme == "" {
+		req.URL.Scheme = "http"
 	}
-	return t.node.HTTPClient().Transport.RoundTrip(request)
+	return t.node.HTTPClient().Transport.RoundTrip(req)
 }
 
 var (
-	_ http.RoundTripper     = (*TailscaleCaddyTransport)(nil)
-	_ caddy.Provisioner     = (*TailscaleCaddyTransport)(nil)
-	_ caddyfile.Unmarshaler = (*TailscaleCaddyTransport)(nil)
+	_ http.RoundTripper     = (*Transport)(nil)
+	_ caddy.Provisioner     = (*Transport)(nil)
+	_ caddy.CleanerUpper    = (*Transport)(nil)
+	_ caddyfile.Unmarshaler = (*Transport)(nil)
 )
