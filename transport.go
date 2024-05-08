@@ -29,7 +29,7 @@ func (t *Transport) CaddyModule() caddy.ModuleInfo {
 
 // UnmarshalCaddyfile populates a Transport config from a caddyfile.
 //
-// We only support a single token identifying the name of a node in the TSApp config.
+// We only support a single token identifying the name of a node in the App config.
 // For example:
 //
 //	reverse_proxy {

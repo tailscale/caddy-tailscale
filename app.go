@@ -1,6 +1,6 @@
 package tscaddy
 
-// app.go contains TSApp and TSNode, which provide global configuration for registering Tailscale nodes.
+// app.go contains App and Node, which provide global configuration for registering Tailscale nodes.
 
 import (
 	"github.com/caddyserver/caddy/v2"
@@ -11,14 +11,14 @@ import (
 )
 
 func init() {
-	caddy.RegisterModule(TSApp{})
-	httpcaddyfile.RegisterGlobalOption("tailscale", parseTSApp)
+	caddy.RegisterModule(App{})
+	httpcaddyfile.RegisterGlobalOption("tailscale", parseAppConfig)
 }
 
-// TSApp is the Tailscale Caddy app used to configure Tailscale nodes.
+// App is the Tailscale Caddy app used to configure Tailscale nodes.
 // Nodes can be used to serve sites privately on a Tailscale network,
 // or to connect to other Tailnet nodes as upstream proxy backend.
-type TSApp struct {
+type App struct {
 	// DefaultAuthKey is the default auth key to use for Tailscale if no other auth key is specified.
 	DefaultAuthKey string `json:"auth_key,omitempty" caddy:"namespace=tailscale.auth_key"`
 
@@ -26,15 +26,15 @@ type TSApp struct {
 	Ephemeral bool `json:"ephemeral,omitempty" caddy:"namespace=tailscale.ephemeral"`
 
 	// Nodes is a map of per-node configuration which overrides global options.
-	Nodes map[string]TSNode `json:"nodes,omitempty" caddy:"namespace=tailscale"`
+	Nodes map[string]Node `json:"nodes,omitempty" caddy:"namespace=tailscale"`
 
 	logger *zap.Logger
 }
 
-// TSNode is a Tailscale node configuration.
+// Node is a Tailscale node configuration.
 // A single node can be used to serve multiple sites on different domains or ports,
 // and/or to connect to other Tailscale nodes.
-type TSNode struct {
+type Node struct {
 	// AuthKey is the Tailscale auth key used to register the node.
 	AuthKey string `json:"auth_key,omitempty" caddy:"namespace=auth_key"`
 
@@ -44,29 +44,29 @@ type TSNode struct {
 	name string
 }
 
-func (TSApp) CaddyModule() caddy.ModuleInfo {
+func (App) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "tailscale",
-		New: func() caddy.Module { return new(TSApp) },
+		New: func() caddy.Module { return new(App) },
 	}
 }
 
-func (t *TSApp) Provision(ctx caddy.Context) error {
+func (t *App) Provision(ctx caddy.Context) error {
 	t.logger = ctx.Logger(t)
 	return nil
 }
 
-func (t *TSApp) Start() error {
+func (t *App) Start() error {
 	return nil
 }
 
-func (t *TSApp) Stop() error {
+func (t *App) Stop() error {
 	return nil
 }
 
-func parseTSApp(d *caddyfile.Dispenser, _ any) (any, error) {
-	app := &TSApp{
-		Nodes: make(map[string]TSNode),
+func parseAppConfig(d *caddyfile.Dispenser, _ any) (any, error) {
+	app := &App{
+		Nodes: make(map[string]Node),
 	}
 	if !d.Next() {
 		return app, d.ArgErr()
@@ -85,9 +85,9 @@ func parseTSApp(d *caddyfile.Dispenser, _ any) (any, error) {
 		case "ephemeral":
 			app.Ephemeral = true
 		default:
-			node, err := parseTSNode(d)
+			node, err := parseNodeConfig(d)
 			if app.Nodes == nil {
-				app.Nodes = map[string]TSNode{}
+				app.Nodes = map[string]Node{}
 			}
 			if err != nil {
 				return nil, err
@@ -102,15 +102,15 @@ func parseTSApp(d *caddyfile.Dispenser, _ any) (any, error) {
 	}, nil
 }
 
-func parseTSNode(d *caddyfile.Dispenser) (TSNode, error) {
+func parseNodeConfig(d *caddyfile.Dispenser) (Node, error) {
 	name := d.Val()
 	segment := d.NewFromNextSegment()
 
 	if !segment.Next() {
-		return TSNode{}, d.ArgErr()
+		return Node{}, d.ArgErr()
 	}
 
-	node := TSNode{name: name}
+	node := Node{name: name}
 	for nesting := segment.Nesting(); segment.NextBlock(nesting); {
 		val := segment.Val()
 		switch val {
@@ -129,5 +129,7 @@ func parseTSNode(d *caddyfile.Dispenser) (TSNode, error) {
 	return node, nil
 }
 
-var _ caddy.App = (*TSApp)(nil)
-var _ caddy.Provisioner = (*TSApp)(nil)
+var (
+	_ caddy.App         = (*App)(nil)
+	_ caddy.Provisioner = (*App)(nil)
+)

@@ -17,29 +17,29 @@ import (
 )
 
 func init() {
-	caddy.RegisterModule(TailscaleAuth{})
+	caddy.RegisterModule(Auth{})
 	httpcaddyfile.RegisterHandlerDirective("tailscale_auth", parseAuthConfig)
 }
 
-// TailscaleAuth is an HTTP authentication provider that authenticates users based on their Tailscale identity.
+// Auth is an HTTP authentication provider that authenticates users based on their Tailscale identity.
 // If configured on a caddy site that is listening on a tailscale node,
 // that node will be used to identify the user information for inbound requests.
 // Otherwise, it will attempt to find and use the local tailscaled daemon running on the system.
-type TailscaleAuth struct {
+type Auth struct {
 	localclient *tailscale.LocalClient
 }
 
-func (TailscaleAuth) CaddyModule() caddy.ModuleInfo {
+func (Auth) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "http.authentication.providers.tailscale",
-		New: func() caddy.Module { return new(TailscaleAuth) },
+		New: func() caddy.Module { return new(Auth) },
 	}
 }
 
 // client returns the tailscale LocalClient for the TailscaleAuth module.
 // If the LocalClient has not already been configured, the provided request will be used to
 // lookup the tailscale node that serviced the request, and get the associated LocalClient.
-func (ta *TailscaleAuth) client(r *http.Request) (*tailscale.LocalClient, error) {
+func (ta *Auth) client(r *http.Request) (*tailscale.LocalClient, error) {
 	if ta.localclient != nil {
 		return ta.localclient, nil
 	}
@@ -78,7 +78,7 @@ type tsnetListener interface {
 //   - tailscale_name: the user's display name
 //   - tailscale_profile_picture: the user's profile picture URL
 //   - tailscale_tailnet: the user's tailnet name (if the user is not connecting to a shared node)
-func (ta TailscaleAuth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.User, bool, error) {
+func (ta Auth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.User, bool, error) {
 	user := caddyauth.User{}
 
 	client, err := ta.client(r)
@@ -117,7 +117,7 @@ func (ta TailscaleAuth) Authenticate(w http.ResponseWriter, r *http.Request) (ca
 }
 
 func parseAuthConfig(_ httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
-	var ta TailscaleAuth
+	var ta Auth
 
 	return caddyauth.Authentication{
 		ProvidersRaw: caddy.ModuleMap{
@@ -125,3 +125,7 @@ func parseAuthConfig(_ httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error
 		},
 	}, nil
 }
+
+var (
+	_ caddyauth.Authenticator = (*Auth)(nil)
+)
