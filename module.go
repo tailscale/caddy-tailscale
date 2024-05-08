@@ -106,7 +106,8 @@ func getNode(ctx caddy.Context, name string) (*tailscaleNode, error) {
 			Logf: func(format string, args ...any) {
 				app.logger.Sugar().Debugf(format, args...)
 			},
-			Ephemeral: getEphemeral(name, app),
+			Ephemeral:    getEphemeral(name, app),
+			RunWebClient: getWebUI(name, app),
 		}
 
 		if s.AuthKey, err = getAuthKey(name, app); err != nil {
@@ -179,7 +180,9 @@ func getControlURL(name string, app *App) (string, error) {
 
 func getEphemeral(name string, app *App) bool {
 	if node, ok := app.Nodes[name]; ok {
-		return node.Ephemeral
+		if v, ok := node.Ephemeral.Get(); ok {
+			return v
+		}
 	}
 	return app.Ephemeral
 }
@@ -195,6 +198,15 @@ func getHostname(name string, app *App) (string, error) {
 	}
 
 	return name, nil
+}
+
+func getWebUI(name string, app *App) bool {
+	if node, ok := app.Nodes[name]; ok {
+		if v, ok := node.WebUI.Get(); ok {
+			return v
+		}
+	}
+	return app.WebUI
 }
 
 // tailscaleNode is a wrapper around a tsnet.Server that provides a fully self-contained Tailscale node.

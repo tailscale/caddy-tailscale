@@ -3,11 +3,14 @@ package tscaddy
 // app.go contains App and Node, which provide global configuration for registering Tailscale nodes.
 
 import (
+	"strconv"
+
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"go.uber.org/zap"
+	"tailscale.com/types/opt"
 )
 
 func init() {
@@ -28,6 +31,9 @@ type App struct {
 	// Ephemeral specifies whether Tailscale nodes should be registered as ephemeral.
 	Ephemeral bool `json:"ephemeral,omitempty" caddy:"namespace=tailscale.ephemeral"`
 
+	// WebUI specifies whether Tailscale nodes should run the Web UI for remote management.
+	WebUI bool `json:"webui,omitempty" caddy:"namespace=tailscale.webui"`
+
 	// Nodes is a map of per-node configuration which overrides global options.
 	Nodes map[string]Node `json:"nodes,omitempty" caddy:"namespace=tailscale"`
 
@@ -45,7 +51,10 @@ type Node struct {
 	ControlURL string `json:"control_url,omitempty" caddy:"namespace=tailscale.control_url"`
 
 	// Ephemeral specifies whether the node should be registered as ephemeral.
-	Ephemeral bool `json:"ephemeral,omitempty" caddy:"namespace=tailscale.ephemeral"`
+	Ephemeral opt.Bool `json:"ephemeral,omitempty" caddy:"namespace=tailscale.ephemeral"`
+
+	// WebUI specifies whether the node should run the Web UI for remote management.
+	WebUI opt.Bool `json:"webui,omitempty" caddy:"namespace=tailscale.webui"`
 
 	// Hostname is the hostname to use when registering the node.
 	Hostname string `json:"hostname,omitempty" caddy:"namespace=tailscale.hostname"`
@@ -97,7 +106,25 @@ func parseAppConfig(d *caddyfile.Dispenser, _ any) (any, error) {
 			}
 			app.ControlURL = d.Val()
 		case "ephemeral":
-			app.Ephemeral = true
+			if d.NextArg() {
+				v, err := strconv.ParseBool(d.Val())
+				if err != nil {
+					return nil, d.WrapErr(err)
+				}
+				app.Ephemeral = v
+			} else {
+				app.Ephemeral = true
+			}
+		case "webui":
+			if d.NextArg() {
+				v, err := strconv.ParseBool(d.Val())
+				if err != nil {
+					return nil, d.WrapErr(err)
+				}
+				app.WebUI = v
+			} else {
+				app.WebUI = true
+			}
 		default:
 			node, err := parseNodeConfig(d)
 			if app.Nodes == nil {
@@ -139,12 +166,30 @@ func parseNodeConfig(d *caddyfile.Dispenser) (Node, error) {
 			}
 			node.ControlURL = segment.Val()
 		case "ephemeral":
-			node.Ephemeral = true
+			if segment.NextArg() {
+				v, err := strconv.ParseBool(segment.Val())
+				if err != nil {
+					return node, segment.WrapErr(err)
+				}
+				node.Ephemeral = opt.NewBool(v)
+			} else {
+				node.Ephemeral = opt.NewBool(true)
+			}
 		case "hostname":
 			if !segment.NextArg() {
 				return node, segment.ArgErr()
 			}
 			node.Hostname = segment.Val()
+		case "webui":
+			if segment.NextArg() {
+				v, err := strconv.ParseBool(segment.Val())
+				if err != nil {
+					return node, segment.WrapErr(err)
+				}
+				node.WebUI = opt.NewBool(v)
+			} else {
+				node.WebUI = opt.NewBool(true)
+			}
 		default:
 			return node, segment.Errf("unrecognized subdirective: %s", segment.Val())
 		}
