@@ -29,10 +29,10 @@ func Test_ParseApp(t *testing.T) {
 			name: "auth_key",
 			d: caddyfile.NewTestDispenser(`
 				tailscsale {
-					auth_key abcdefghijklmnopqrstuvwxyz
+					auth_key tskey-default
 				}`),
-			want:    `{"auth_key":"abcdefghijklmnopqrstuvwxyz"}`,
-			authKey: "abcdefghijklmnopqrstuvwxyz",
+			want:    `{"auth_key":"tskey-default"}`,
+			authKey: "tskey-default",
 		},
 		{
 			name: "ephemeral",
@@ -57,34 +57,33 @@ func Test_ParseApp(t *testing.T) {
 				tailscsale {
 					foo
 				}`),
-			want: `{"servers":{"foo":{}}}`,
+			want: `{"nodes":{"foo":{}}}`,
 		},
 		{
 			name: "tailscale with server",
 			d: caddyfile.NewTestDispenser(`
 				tailscsale {
-					auth_key 1234567890
+					auth_key tskey-default
 					foo {
-						auth_key  abcdefghijklmnopqrstuvwxyz
+						auth_key tskey-node
 					}
 				}`),
-			want:    `{"auth_key":"1234567890","servers":{"foo":{"auth_key":"abcdefghijklmnopqrstuvwxyz"}}}`,
+			want:    `{"auth_key":"tskey-default","nodes":{"foo":{"auth_key":"tskey-node"}}}`,
 			wantErr: false,
-			authKey: "abcdefghijklmnopqrstuvwxyz",
+			authKey: "tskey-node",
 		},
 	}
 
 	for _, testcase := range tests {
 		t.Run(testcase.name, func(t *testing.T) {
-			got, err := parseApp(testcase.d, nil)
+			got, err := parseTSApp(testcase.d, nil)
 			if err != nil {
 				if !testcase.wantErr {
 					t.Errorf("parseApp() error = %v, wantErr %v", err, testcase.wantErr)
 					return
 				}
 				return
-			}
-			if testcase.wantErr && err == nil {
+			} else if testcase.wantErr {
 				t.Errorf("parseApp() err = %v, wantErr %v", err, testcase.wantErr)
 				return
 			}

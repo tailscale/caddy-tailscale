@@ -1,30 +1,24 @@
+// Package tscaddy provides a set of Caddy modules to integrate Tailscale into Caddy.
 package tscaddy
+
+// module.go contains the Tailscale network listeners for caddy
+// as well as some shared logic for registered Tailscale nodes.
 
 import (
 	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 	"path"
 	"strings"
 
 	"github.com/caddyserver/caddy/v2"
-	"github.com/caddyserver/caddy/v2/caddyconfig"
-	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
-	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
-	"github.com/caddyserver/caddy/v2/modules/caddyhttp/caddyauth"
 	"go.uber.org/zap"
-	"tailscale.com/client/tailscale"
 	"tailscale.com/tsnet"
 )
 
-var servers = caddy.NewUsagePool()
-
 func init() {
-	caddy.RegisterModule(TailscaleAuth{})
-	httpcaddyfile.RegisterHandlerDirective("tailscale_auth", parseCaddyfile)
 	caddy.RegisterNetwork("tailscale", getPlainListener)
 	caddy.RegisterNetwork("tailscale+tls", getTLSListener)
 	caddy.RegisterModule(&TailscaleCaddyTransport{})
@@ -41,7 +35,7 @@ func getPlainListener(c context.Context, _ string, addr string, _ net.ListenConf
 		return nil, err
 	}
 
-	s, err := getServer(ctx, host)
+	s, err := getNode(ctx, host)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +44,7 @@ func getPlainListener(c context.Context, _ string, addr string, _ net.ListenConf
 		network = "tcp"
 	}
 
-	ln := &tsnetServerDestructor{
+	ln := &tailscaleNode{
 		Server: s.Server,
 	}
 	return ln.Listen(network, ":"+port)
@@ -67,7 +61,7 @@ func getTLSListener(c context.Context, _ string, addr string, _ net.ListenConfig
 		return nil, err
 	}
 
-	s, err := getServer(ctx, host)
+	s, err := getNode(ctx, host)
 	if err != nil {
 		return nil, err
 	}
@@ -89,40 +83,39 @@ func getTLSListener(c context.Context, _ string, addr string, _ net.ListenConfig
 	return ln, nil
 }
 
-// getServer returns a tailscale tsnet.Server for Caddy apps to listen on. The specified
-// address will take the form of "tailscale/host:port" or "tailscale+tls/host:port" with
-// host being optional. If specified, host will be provided to tsnet as the desired
-// hostname for the tailscale node. Only one tsnet server is created per host, even if
-// multiple ports are being listened on for the host.
+// nodes are the Tailscale nodes that have been configured and started.
+// Node configuration comes from the global Tailscale Caddy app.
+// When nodes are no longer in used (e.g. all listeners have been closed), they are shutdown.
 //
-// Auth keys can be provided in environment variables of the form TS_AUTHKEY_<HOST>.  If
-// no host is specified in the address, the environment variable TS_AUTHKEY will be used.
-func getServer(ctx caddy.Context, addr string) (*tsnetServerDestructor, error) {
-	_, host, _, err := caddy.SplitNetworkAddress(addr)
-	if err != nil {
-		return nil, err
-	}
+// Callers should use getNode() to get a node by name, rather than accessing this pool directly.
+var nodes = caddy.NewUsagePool()
 
+// getNode returns a tailscale node for Caddy apps to interface with.
+//
+// The specified name will be used to lookup the node configuration from the tailscale caddy app,
+// used to register the node the first time it is used.
+// Only one tailscale node is created per name, even if multiple listeners are created for the node.
+func getNode(ctx caddy.Context, name string) (*tailscaleNode, error) {
 	appIface, err := ctx.App("tailscale")
 	if err != nil {
 		return nil, err
 	}
 	app := appIface.(*TSApp)
 
-	s, _, err := servers.LoadOrNew(host, func() (caddy.Destructor, error) {
+	s, _, err := nodes.LoadOrNew(name, func() (caddy.Destructor, error) {
 		s := &tsnet.Server{
-			Hostname: host,
+			Hostname: name,
 			Logf: func(format string, args ...any) {
 				app.logger.Sugar().Debugf(format, args...)
 			},
+			Ephemeral: getEphemeral(name, app),
 		}
 
-		if host != "" {
-			if s.AuthKey, err = getAuthKey(host, app); err != nil {
-				app.logger.Warn("error parsing auth key", zap.Error(err))
-			}
-			s.Ephemeral = getEphemeral(host, app)
+		if s.AuthKey, err = getAuthKey(name, app); err != nil {
+			app.logger.Warn("error parsing auth key", zap.Error(err))
+		}
 
+		if name != "" {
 			// Set config directory for tsnet.  By default, tsnet will use the name of the
 			// running program, but we include the hostname as well so that a single
 			// caddy instance can have multiple tsnet servers.
@@ -130,13 +123,13 @@ func getServer(ctx caddy.Context, addr string) (*tsnetServerDestructor, error) {
 			if err != nil {
 				return nil, err
 			}
-			s.Dir = path.Join(configDir, "tsnet-caddy-"+host)
+			s.Dir = path.Join(configDir, "tsnet-caddy-"+name)
 			if err := os.MkdirAll(s.Dir, 0700); err != nil {
 				return nil, err
 			}
 		}
 
-		return &tsnetServerDestructor{
+		return &tailscaleNode{
 			s,
 		}, nil
 	})
@@ -144,19 +137,20 @@ func getServer(ctx caddy.Context, addr string) (*tsnetServerDestructor, error) {
 		return nil, err
 	}
 
-	return s.(*tsnetServerDestructor), nil
+	return s.(*tailscaleNode), nil
 }
 
 var repl = caddy.NewReplacer()
 
-func getAuthKey(host string, app *TSApp) (string, error) {
+func getAuthKey(name string, app *TSApp) (string, error) {
 	if app == nil {
 		return "", nil
 	}
 
-	svr := app.Servers[host]
-	if svr.AuthKey != "" {
-		return repl.ReplaceOrErr(svr.AuthKey, true, true)
+	if node, ok := app.Nodes[name]; ok {
+		if node.AuthKey != "" {
+			return repl.ReplaceOrErr(node.AuthKey, true, true)
+		}
 	}
 
 	if app.DefaultAuthKey != "" {
@@ -165,139 +159,50 @@ func getAuthKey(host string, app *TSApp) (string, error) {
 
 	// Set authkey to "TS_AUTHKEY_<HOST>".
 	// If empty, fall back to "TS_AUTHKEY".
-	authKey := os.Getenv("TS_AUTHKEY_" + strings.ToUpper(host))
+	authKey := os.Getenv("TS_AUTHKEY_" + strings.ToUpper(name))
 	if authKey != "" {
-		app.logger.Warn("Relying on TS_AUTHKEY_{HOST} env var is deprecated. Set caddy config instead.", zap.Any("host", host))
+		app.logger.Warn("Relying on TS_AUTHKEY_{HOST} env var is deprecated. Set caddy config instead.", zap.Any("host", name))
 		return authKey, nil
 	}
 
 	return os.Getenv("TS_AUTHKEY"), nil
 }
 
-func getEphemeral(host string, app *TSApp) bool {
+func getEphemeral(name string, app *TSApp) bool {
 	if app == nil {
 		return false
 	}
-	if svr, ok := app.Servers[host]; ok {
-		return svr.Ephemeral
+	if node, ok := app.Nodes[name]; ok {
+		return node.Ephemeral
 	}
 
 	return app.Ephemeral
 }
 
-type TailscaleAuth struct {
-	localclient *tailscale.LocalClient
-}
-
-func (TailscaleAuth) CaddyModule() caddy.ModuleInfo {
-	return caddy.ModuleInfo{
-		ID:  "http.authentication.providers.tailscale",
-		New: func() caddy.Module { return new(TailscaleAuth) },
-	}
-}
-
-// client returns the tailscale LocalClient for the TailscaleAuth module.  If the LocalClient
-// has not already been configured, the provided request will be used to set it up for the
-// appropriate tsnet server.
-func (ta *TailscaleAuth) client(r *http.Request) (*tailscale.LocalClient, error) {
-	if ta.localclient != nil {
-		return ta.localclient, nil
-	}
-
-	// if request was made through a tsnet listener, set up the client for the associated tsnet
-	// server.
-	server := r.Context().Value(caddyhttp.ServerCtxKey).(*caddyhttp.Server)
-	for _, listener := range server.Listeners() {
-		if tsl, ok := listener.(tsnetListener); ok {
-			var err error
-			ta.localclient, err = tsl.Server().LocalClient()
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	if ta.localclient == nil {
-		// default to empty client that will talk to local tailscaled
-		ta.localclient = new(tailscale.LocalClient)
-	}
-
-	return ta.localclient, nil
-}
-
-type tsnetListener interface {
-	Server() *tsnet.Server
-}
-
-func (ta TailscaleAuth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.User, bool, error) {
-	user := caddyauth.User{}
-
-	client, err := ta.client(r)
-	if err != nil {
-		return user, false, err
-	}
-
-	info, err := client.WhoIs(r.Context(), r.RemoteAddr)
-	if err != nil {
-		return user, false, err
-	}
-
-	if len(info.Node.Tags) != 0 {
-		return user, false, fmt.Errorf("node %s has tags", info.Node.Hostinfo.Hostname())
-	}
-
-	var tailnet string
-	if !info.Node.Hostinfo.ShareeNode() {
-		if s, found := strings.CutPrefix(info.Node.Name, info.Node.ComputedName+"."); found {
-			if s, found := strings.CutSuffix(s, ".beta.tailscale.net."); found {
-				tailnet = s
-			}
-		}
-	}
-
-	user.ID = info.UserProfile.LoginName
-	user.Metadata = map[string]string{
-		"tailscale_login":           strings.Split(info.UserProfile.LoginName, "@")[0],
-		"tailscale_user":            info.UserProfile.LoginName,
-		"tailscale_name":            info.UserProfile.DisplayName,
-		"tailscale_profile_picture": info.UserProfile.ProfilePicURL,
-		"tailscale_tailnet":         tailnet,
-	}
-	return user, true, nil
-}
-
-func parseCaddyfile(_ httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
-	var ta TailscaleAuth
-
-	return caddyauth.Authentication{
-		ProvidersRaw: caddy.ModuleMap{
-			"tailscale": caddyconfig.JSON(ta, nil),
-		},
-	}, nil
-}
-
-type tsnetServerDestructor struct {
+// tailscaleNode is a wrapper around a tsnet.Server that provides a fully self-contained Tailscale node.
+// This node can listen on the tailscale network interface, or be used to connect to other nodes in the tailnet.
+type tailscaleNode struct {
 	*tsnet.Server
 }
 
-func (t tsnetServerDestructor) Destruct() error {
+func (t tailscaleNode) Destruct() error {
 	return t.Close()
 }
 
-func (t *tsnetServerDestructor) Listen(network string, addr string) (net.Listener, error) {
+func (t *tailscaleNode) Listen(network string, addr string) (net.Listener, error) {
 	ln, err := t.Server.Listen(network, addr)
 	if err != nil {
 		return nil, err
 	}
 	serverListener := &tsnetServerListener{
-		hostname: t.Hostname,
+		name:     t.Hostname,
 		Listener: ln,
 	}
 	return serverListener, nil
 }
 
 type tsnetServerListener struct {
-	hostname string
+	name string
 	net.Listener
 }
 
@@ -308,6 +213,6 @@ func (t *tsnetServerListener) Close() error {
 
 	// Decrement usage count of server for this hostname.
 	// If usage reaches zero, then the server is actually shutdown.
-	_, err := servers.Delete(t.hostname)
+	_, err := nodes.Delete(t.name)
 	return err
 }

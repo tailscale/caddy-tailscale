@@ -61,11 +61,11 @@ func Test_GetAuthKey(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			app := &TSApp{
 				DefaultAuthKey: tt.defaultKey,
-				Servers:        make(map[string]TSServer),
+				Nodes:          make(map[string]TSNode),
 			}
 			app.Provision(caddy.Context{})
 			if tt.hostKey != "" {
-				app.Servers[host] = TSServer{
+				app.Nodes[host] = TSNode{
 					AuthKey: tt.hostKey,
 				}
 			}
@@ -85,27 +85,27 @@ func Test_Listen(t *testing.T) {
 	must.Do(caddy.Run(new(caddy.Config)))
 	ctx := caddy.ActiveContext()
 
-	svr, err := getServer(ctx, "testhost")
+	node, err := getNode(ctx, "testhost")
 	if err != nil {
 		t.Fatal("failed to get server", err)
 	}
 
-	ln, err := svr.Listen("tcp", ":80")
+	ln, err := node.Listen("tcp", ":80")
 	if err != nil {
 		t.Fatal("failed to listen", err)
 	}
-	count, exists := servers.References("testhost")
+	count, exists := nodes.References("testhost")
 	if !exists && count != 1 {
 		t.Fatal("reference doesn't exist")
 	}
 	ln.Close()
 
-	count, exists = servers.References("testhost")
+	count, exists = nodes.References("testhost")
 	if exists && count != 0 {
 		t.Fatal("reference exists when it shouldn't")
 	}
 
-	err = svr.Close()
+	err = node.Close()
 	if !errors.Is(err, net.ErrClosed) {
 		t.Fatal("unexpected error", err)
 	}
