@@ -174,7 +174,7 @@ func cmdTailscaleProxy(fs caddycmd.Flags) (int, error) {
 
 	authHandler := caddyauth.Authentication{
 		ProvidersRaw: caddy.ModuleMap{
-			"tailscale": caddyconfig.JSON(TailscaleAuth{}, nil),
+			"tailscale": caddyconfig.JSON(Auth{}, nil),
 		},
 	}
 	authRoute := caddyhttp.Route{

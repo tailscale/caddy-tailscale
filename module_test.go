@@ -59,13 +59,13 @@ func Test_GetAuthKey(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			app := &TSApp{
+			app := &App{
 				DefaultAuthKey: tt.defaultKey,
-				Nodes:          make(map[string]TSNode),
+				Nodes:          make(map[string]Node),
 			}
 			app.Provision(caddy.Context{})
 			if tt.hostKey != "" {
-				app.Nodes[host] = TSNode{
+				app.Nodes[host] = Node{
 					AuthKey: tt.hostKey,
 				}
 			}

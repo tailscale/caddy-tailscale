@@ -99,7 +99,7 @@ func getNode(ctx caddy.Context, name string) (*tailscaleNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	app := appIface.(*TSApp)
+	app := appIface.(*App)
 
 	s, _, err := nodes.LoadOrNew(name, func() (caddy.Destructor, error) {
 		s := &tsnet.Server{
@@ -141,7 +141,7 @@ func getNode(ctx caddy.Context, name string) (*tailscaleNode, error) {
 
 var repl = caddy.NewReplacer()
 
-func getAuthKey(name string, app *TSApp) (string, error) {
+func getAuthKey(name string, app *App) (string, error) {
 	if app == nil {
 		return "", nil
 	}
@@ -167,7 +167,7 @@ func getAuthKey(name string, app *TSApp) (string, error) {
 	return os.Getenv("TS_AUTHKEY"), nil
 }
 
-func getEphemeral(name string, app *TSApp) bool {
+func getEphemeral(name string, app *App) bool {
 	if app == nil {
 		return false
 	}

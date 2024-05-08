@@ -76,7 +76,7 @@ func Test_ParseApp(t *testing.T) {
 
 	for _, testcase := range tests {
 		t.Run(testcase.name, func(t *testing.T) {
-			got, err := parseTSApp(testcase.d, nil)
+			got, err := parseAppConfig(testcase.d, nil)
 			if err != nil {
 				if !testcase.wantErr {
 					t.Errorf("parseApp() error = %v, wantErr %v", err, testcase.wantErr)
@@ -91,9 +91,9 @@ func Test_ParseApp(t *testing.T) {
 			if diff := compareJSON(gotJSON, testcase.want, t); diff != "" {
 				t.Errorf("parseApp() diff(-got +want):\n%s", diff)
 			}
-			app := new(TSApp)
+			app := new(App)
 			if err := json.Unmarshal([]byte(gotJSON), &app); err != nil {
-				t.Error("failed to unmarshal json into TSApp")
+				t.Error("failed to unmarshal json into App")
 			}
 		})
 	}
