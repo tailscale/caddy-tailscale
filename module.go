@@ -111,7 +111,10 @@ func getNode(ctx caddy.Context, name string) (*tailscaleNode, error) {
 		}
 
 		if s.AuthKey, err = getAuthKey(name, app); err != nil {
-			app.logger.Warn("error parsing auth key", zap.Error(err))
+			return nil, err
+		}
+		if s.ControlURL, err = getControlURL(name, app); err != nil {
+			return nil, err
 		}
 
 		if name != "" {
@@ -142,10 +145,6 @@ func getNode(ctx caddy.Context, name string) (*tailscaleNode, error) {
 var repl = caddy.NewReplacer()
 
 func getAuthKey(name string, app *App) (string, error) {
-	if app == nil {
-		return "", nil
-	}
-
 	if node, ok := app.Nodes[name]; ok {
 		if node.AuthKey != "" {
 			return repl.ReplaceOrErr(node.AuthKey, true, true)
@@ -167,14 +166,19 @@ func getAuthKey(name string, app *App) (string, error) {
 	return os.Getenv("TS_AUTHKEY"), nil
 }
 
-func getEphemeral(name string, app *App) bool {
-	if app == nil {
-		return false
+func getControlURL(name string, app *App) (string, error) {
+	if node, ok := app.Nodes[name]; ok {
+		if node.ControlURL != "" {
+			return repl.ReplaceOrErr(node.ControlURL, true, true)
+		}
 	}
+	return repl.ReplaceOrErr(app.ControlURL, true, true)
+}
+
+func getEphemeral(name string, app *App) bool {
 	if node, ok := app.Nodes[name]; ok {
 		return node.Ephemeral
 	}
-
 	return app.Ephemeral
 }
 

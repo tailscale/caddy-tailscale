@@ -22,6 +22,9 @@ type App struct {
 	// DefaultAuthKey is the default auth key to use for Tailscale if no other auth key is specified.
 	DefaultAuthKey string `json:"auth_key,omitempty" caddy:"namespace=tailscale.auth_key"`
 
+	// ControlURL specifies the default control URL to use for nodes.
+	ControlURL string `json:"control_url,omitempty" caddy:"namespace=tailscale.control_url"`
+
 	// Ephemeral specifies whether Tailscale nodes should be registered as ephemeral.
 	Ephemeral bool `json:"ephemeral,omitempty" caddy:"namespace=tailscale.ephemeral"`
 
@@ -37,6 +40,9 @@ type App struct {
 type Node struct {
 	// AuthKey is the Tailscale auth key used to register the node.
 	AuthKey string `json:"auth_key,omitempty" caddy:"namespace=auth_key"`
+
+	// ControlURL specifies the control URL to use for the node.
+	ControlURL string `json:"control_url,omitempty" caddy:"namespace=tailscale.control_url"`
 
 	// Ephemeral specifies whether the node should be registered as ephemeral.
 	Ephemeral bool `json:"ephemeral,omitempty" caddy:"namespace=tailscale.ephemeral"`
@@ -82,6 +88,11 @@ func parseAppConfig(d *caddyfile.Dispenser, _ any) (any, error) {
 				return nil, d.ArgErr()
 			}
 			app.DefaultAuthKey = d.Val()
+		case "control_url":
+			if !d.NextArg() {
+				return nil, d.ArgErr()
+			}
+			app.ControlURL = d.Val()
 		case "ephemeral":
 			app.Ephemeral = true
 		default:
@@ -119,6 +130,11 @@ func parseNodeConfig(d *caddyfile.Dispenser) (Node, error) {
 				return node, segment.ArgErr()
 			}
 			node.AuthKey = segment.Val()
+		case "control_url":
+			if !segment.NextArg() {
+				return node, segment.ArgErr()
+			}
+			node.ControlURL = segment.Val()
 		case "ephemeral":
 			node.Ephemeral = true
 		default:
