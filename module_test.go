@@ -81,6 +81,99 @@ func Test_GetAuthKey(t *testing.T) {
 	}
 }
 
+func Test_GetControlURL(t *testing.T) {
+	const nodeName = "node"
+	tests := map[string]struct {
+		env        map[string]string // env vars to set
+		defaultURL string            // default control_url in caddy config
+		nodeURL    string            // node control_url in caddy config
+		want       string
+	}{
+		"default empty URL": {
+			want: "",
+		},
+		"custom URL from app config": {
+			defaultURL: "http://custom.example.com",
+			want:       "http://custom.example.com",
+		},
+		"custom URL from node config": {
+			defaultURL: "xxx",
+			nodeURL:    "http://custom.example.com",
+			want:       "http://custom.example.com",
+		},
+		"custom URL from env on app config": {
+			env:        map[string]string{"CONTROL_URL": "http://env.example.com"},
+			defaultURL: "{env.CONTROL_URL}",
+			want:       "http://env.example.com",
+		},
+		"custom URL from env on node config": {
+			env:        map[string]string{"CONTROL_URL": "http://env.example.com"},
+			defaultURL: "xxx",
+			nodeURL:    "{env.CONTROL_URL}",
+			want:       "http://env.example.com",
+		},
+	}
+	for tn, tt := range tests {
+		t.Run(tn, func(t *testing.T) {
+			app := &App{
+				ControlURL: tt.defaultURL,
+				Nodes:      make(map[string]Node),
+			}
+			if tt.nodeURL != "" {
+				app.Nodes[nodeName] = Node{
+					ControlURL: tt.nodeURL,
+				}
+			}
+			app.Provision(caddy.Context{})
+			for k, v := range tt.env {
+				t.Setenv(k, v)
+			}
+
+			got, _ := getControlURL(nodeName, app)
+			if got != tt.want {
+				t.Errorf("GetControlURL() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+func Test_GetHostname(t *testing.T) {
+	const nodeName = "node"
+	tests := map[string]struct {
+		env      map[string]string // env vars to set
+		hostname string            // hostname value in caddy config
+		want     string
+	}{
+		"default hostname from node name": {
+			want: nodeName,
+		},
+		"custom hostname from node config": {
+			hostname: "custom",
+			want:     "custom",
+		},
+		"custom hostname with env vars": {
+			env:      map[string]string{"REGION": "eu", "ENV": "prod"},
+			hostname: "custom-{env.REGION}-{env.ENV}",
+			want:     "custom-eu-prod",
+		},
+	}
+	for tn, tt := range tests {
+		t.Run(tn, func(t *testing.T) {
+			app := &App{Nodes: map[string]Node{
+				nodeName: {Hostname: tt.hostname},
+			}}
+			app.Provision(caddy.Context{})
+			for k, v := range tt.env {
+				t.Setenv(k, v)
+			}
+
+			got, _ := getHostname(nodeName, app)
+			if got != tt.want {
+				t.Errorf("GetHostname() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func Test_Listen(t *testing.T) {
 	must.Do(caddy.Run(new(caddy.Config)))
 	ctx := caddy.ActiveContext()
