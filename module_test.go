@@ -3,6 +3,8 @@ package tscaddy
 import (
 	"errors"
 	"net"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/caddyserver/caddy/v2"
@@ -203,6 +205,54 @@ func Test_GetHostname(t *testing.T) {
 			got, _ := getHostname(nodeName, app)
 			if got != tt.want {
 				t.Errorf("GetHostname() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_GetStateDir(t *testing.T) {
+	const nodeName = "node"
+	configDir := must.Get(os.UserConfigDir())
+	tests := map[string]struct {
+		env        map[string]string // env vars to set
+		defaultDir string            // default state_dir in caddy config
+		nodeDir    string            // node state_dir in caddy config
+		want       string
+	}{
+		"default statedir from node name": {
+			want: filepath.Join(configDir, "tsnet-caddy-"+nodeName),
+		},
+		"custom hostname from app config": {
+			env:        map[string]string{"TMPDIR": "/tmp/"},
+			defaultDir: "{env.TMPDIR}",
+			want:       filepath.Join("/tmp/", nodeName),
+		},
+		"custom hostname from node config": {
+			env:        map[string]string{"TMPDIR": "/tmp/"},
+			defaultDir: "/xxx/",
+			nodeDir:    "{env.TMPDIR}",
+			want:       "/tmp/",
+		},
+	}
+	for tn, tt := range tests {
+		t.Run(tn, func(t *testing.T) {
+			app := &App{
+				StateDir: tt.defaultDir,
+				Nodes:    make(map[string]Node),
+			}
+			if tt.nodeDir != "" {
+				app.Nodes[nodeName] = Node{
+					StateDir: tt.nodeDir,
+				}
+			}
+			app.Provision(caddy.Context{})
+			for k, v := range tt.env {
+				t.Setenv(k, v)
+			}
+
+			got, _ := getStateDir(nodeName, app)
+			if got != tt.want {
+				t.Errorf("GetStateDir() = %v, want %v", got, tt.want)
 			}
 		})
 	}

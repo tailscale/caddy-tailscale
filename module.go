@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/caddyserver/caddy/v2"
@@ -120,18 +120,11 @@ func getNode(ctx caddy.Context, name string) (*tailscaleNode, error) {
 			return nil, err
 		}
 
-		if name != "" {
-			// Set config directory for tsnet.  By default, tsnet will use the name of the
-			// running program, but we include the hostname as well so that a single
-			// caddy instance can have multiple tsnet servers.
-			configDir, err := os.UserConfigDir()
-			if err != nil {
-				return nil, err
-			}
-			s.Dir = path.Join(configDir, "tsnet-caddy-"+name)
-			if err := os.MkdirAll(s.Dir, 0700); err != nil {
-				return nil, err
-			}
+		if s.Dir, err = getStateDir(name, app); err != nil {
+			return nil, err
+		}
+		if err := os.MkdirAll(s.Dir, 0700); err != nil {
+			return nil, err
 		}
 
 		return &tailscaleNode{
@@ -198,6 +191,30 @@ func getHostname(name string, app *App) (string, error) {
 	}
 
 	return name, nil
+}
+
+func getStateDir(name string, app *App) (string, error) {
+	if node, ok := app.Nodes[name]; ok {
+		if node.StateDir != "" {
+			return repl.ReplaceOrErr(node.StateDir, true, true)
+		}
+	}
+
+	if app.StateDir != "" {
+		s, err := repl.ReplaceOrErr(app.StateDir, true, true)
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(s, name), nil
+	}
+
+	// By default, tsnet will use the name of the running program in the state directory,
+	// but we also include the hostname so that a single caddy instance can have multiple nodes.
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configDir, "tsnet-caddy-"+name), nil
 }
 
 func getWebUI(name string, app *App) bool {

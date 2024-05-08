@@ -31,6 +31,10 @@ type App struct {
 	// Ephemeral specifies whether Tailscale nodes should be registered as ephemeral.
 	Ephemeral bool `json:"ephemeral,omitempty" caddy:"namespace=tailscale.ephemeral"`
 
+	// StateDir specifies the default state directory for Tailscale nodes.
+	// Each node will have a subdirectory under this parent directory for its state.
+	StateDir string `json:"state_dir,omitempty" caddy:"namespace=tailscale.state_dir"`
+
 	// WebUI specifies whether Tailscale nodes should run the Web UI for remote management.
 	WebUI bool `json:"webui,omitempty" caddy:"namespace=tailscale.webui"`
 
@@ -58,6 +62,9 @@ type Node struct {
 
 	// Hostname is the hostname to use when registering the node.
 	Hostname string `json:"hostname,omitempty" caddy:"namespace=tailscale.hostname"`
+
+	// StateDir specifies the state directory for the node.
+	StateDir string `json:"state_dir,omitempty" caddy:"namespace=tailscale.state_dir"`
 
 	name string
 }
@@ -115,6 +122,11 @@ func parseAppConfig(d *caddyfile.Dispenser, _ any) (any, error) {
 			} else {
 				app.Ephemeral = true
 			}
+		case "state_dir":
+			if !d.NextArg() {
+				return nil, d.ArgErr()
+			}
+			app.StateDir = d.Val()
 		case "webui":
 			if d.NextArg() {
 				v, err := strconv.ParseBool(d.Val())
@@ -180,6 +192,11 @@ func parseNodeConfig(d *caddyfile.Dispenser) (Node, error) {
 				return node, segment.ArgErr()
 			}
 			node.Hostname = segment.Val()
+		case "state_dir":
+			if !segment.NextArg() {
+				return node, segment.ArgErr()
+			}
+			node.StateDir = segment.Val()
 		case "webui":
 			if segment.NextArg() {
 				v, err := strconv.ParseBool(segment.Val())
