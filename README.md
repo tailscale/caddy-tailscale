@@ -125,10 +125,20 @@ it would look first for the `TS_AUTHKEY_MYHOST` environment variable, then
 `TS_AUTHKEY`.
 
 If no auth key is provided, then Tailscale will generate a URL that can be used
-to add the new node and print it to the Caddy log. Tailscale logs can be
-somewhat noisy so are turned off by default. Set `TS_VERBOSE=1` to see the URL
-logged. After the node had been added to your network, you can restart Caddy
-without the debug flag.
+to add the new node and print it to the Caddy log.
+Tailscale logs can be somewhat noisy so are turned off by default.
+Set the log level for the tailscale module to DEBUG to see the URL with [a Caddy logger](https://caddyserver.com/docs/caddyfile/options#log) like this:
+
+```yaml
+{
+  log tailscale {
+    output stdout
+    level DEBUG
+    include tailscale
+  }
+}
+```
+After the node had been added to your network, you can restart Caddy without the custom debug logger for tailscale.
 
 ## Caddy authentication provider
 
