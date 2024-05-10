@@ -106,6 +106,9 @@ func getNode(ctx caddy.Context, name string) (*tailscaleNode, error) {
 			Logf: func(format string, args ...any) {
 				app.logger.Sugar().Debugf(format, args...)
 			},
+			UserLogf: func(format string, args ...any) {
+				app.logger.Sugar().Infof(format, args...)
+			},
 			Ephemeral:    getEphemeral(name, app),
 			RunWebClient: getWebUI(name, app),
 		}

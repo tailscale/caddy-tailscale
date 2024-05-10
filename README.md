@@ -85,19 +85,7 @@ Supported options are:
 
 All configuration values are optional, though an [auth key] is strongly recommended.
 If no auth key is present, one will be loaded from the default `$TS_AUTHKEY` environment variable.
-Failing that, it will log an auth URL to the Caddy log at `DEBUG` level.
-Because these logs can be quite noisy, they must be enabled with the [debug option]
-or with a [named logger]:
-
-```caddyfile
-{
-  log tailscale {
-    output stdout
-    level DEBUG
-    include tailscale
-  }
-}
-```
+Failing that, it will log an auth URL to the Caddy log that can be used to register the node.
 
 After the node had been added to your network, you can restart Caddy without the debug logging.
 Unless the node is registered as `ephemeral`, the auth key is only needed on first run.
