@@ -1,0 +1,18 @@
+# This is basically the simplest possible Caddy config with Tailscale.
+# This will register a new node using the auth key in the TS_AUTHKEY env var.
+# The new node will be named "caddy", and will have a site running on port 80
+# which simply responds "OK" to all requests.
+
+# This block isn't necessary for the simplest config,
+# but is included to ensure that nodes are registered as ephemeral.
+{
+  tailscale {
+    ephemeral
+  }
+}
+
+# This site will run at <http://caddy/>.
+:80 {
+  bind tailscale/
+  respond OK
+}

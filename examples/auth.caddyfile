@@ -1,0 +1,20 @@
+# This config demonstrates using the Tailscale auth provider.
+# A site is run on the "caddytest" node which uses the auth provider
+# to include Tailscale user data in the response.
+#
+# Run this configuration and then visit <http://caddytest/>.
+
+{
+  order tailscale_auth after basicauth
+  tailscale {
+    ephemeral # create all nodes as ephemeral
+  }
+}
+
+# This site will run at <http://caddytest/>.
+:80 {
+  bind tailscale/caddytest
+  tailscale_auth
+  templates
+  respond `Hello, {{placeholder "http.auth.user.id"}}`
+}
