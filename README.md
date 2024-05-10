@@ -21,6 +21,22 @@ Use [xcaddy](https://github.com/caddyserver/xcaddy) to build Caddy with the Tail
 xcaddy build v2.7.6 --with github.com/tailscale/caddy-tailscale
 ```
 
+### Running examples
+
+Multiple example configurations are provided in the [examples directory].
+These examples expect an [auth key] to be set in the `TS_AUTHKEY` environment variable.
+All nodes registered while running these examples will be ephemeral and removed after disconnect.
+See the comments in the individual files for details.
+
+Run them with:
+
+```
+TS_AUTHKEY=<tskey-auth-XXXXX> \
+./caddy run -a caddyfile -c examples/<file>
+```
+
+[examples directory]: ./examples/
+
 ## Configuration
 
 In a [Caddyfile], use the `tailscale` [global option] to configure your Tailscale nodes.
@@ -39,47 +55,47 @@ Supported options are:
 
 ```caddyfile
 {
-    tailscale {
-        # Tailscale auth key used to register nodes.
-        auth_key <auth_key>
+  tailscale {
+    # Tailscale auth key used to register nodes.
+    auth_key <auth_key>
 
-        # Alternate control server URL. Leave empty to use the default server.
-        control_url <control_url>
+    # Alternate control server URL. Leave empty to use the default server.
+    control_url <control_url>
 
-        # If true, register ephemeral nodes that are removed after disconnect.
-        # Default: false
-        ephemeral true|false
+    # If true, register ephemeral nodes that are removed after disconnect.
+    # Default: false
+    ephemeral true|false
 
-        # Directory to store Tailscale state in. A subdirectory will be created for each node.
-        # The default is to store state in the user's config dir (see os.UserConfDir).
-        state_dir <filepath>
+    # Directory to store Tailscale state in. A subdirectory will be created for each node.
+    # The default is to store state in the user's config dir (see os.UserConfDir).
+    state_dir <filepath>
 
-        # If true, run the Tailscale web UI for remotely managing the node. (https://tailscale.com/kb/1325)
-        # Default: false
-        webui true|false
+    # If true, run the Tailscale web UI for remotely managing the node. (https://tailscale.com/kb/1325)
+    # Default: false
+    webui true|false
 
-        # Any number of named node configs can be specified to override global options.
-        <node_name> {
-          # Tailscale auth key used to register this node.
-          auth_key <auth_key>
+    # Any number of named node configs can be specified to override global options.
+    <node_name> {
+      # Tailscale auth key used to register this node.
+      auth_key <auth_key>
 
-          # Alternate control server URL.
-          control_url <control_url>
+      # Alternate control server URL.
+      control_url <control_url>
 
-          # If true, remove this node after disconnect.
-          ephemeral true|false
+      # If true, remove this node after disconnect.
+      ephemeral true|false
 
-          # Hostname to request when registering this node.
-          # Default: <node_name> used for this node configuration
-          hostname <hostname>
+      # Hostname to request when registering this node.
+      # Default: <node_name> used for this node configuration
+      hostname <hostname>
 
-          # Directory to store Tailscale state in for this node. No subdirectory is created.
-          state_dir <filepath>
+      # Directory to store Tailscale state in for this node. No subdirectory is created.
+      state_dir <filepath>
 
-          # If true, run the Tailscale web UI for remotely managing this node.
-          webui true|false
-        }
+      # If true, run the Tailscale web UI for remotely managing this node.
+      webui true|false
     }
+  }
 }
 ```
 
@@ -119,15 +135,16 @@ Configure a site block as usual, and use the [bind] directive to specify a tails
 
 ```
 :80 {
-    bind tailscale/
+  bind tailscale/
 }
 ```
 
+The trailing slash is required.
 You can also specify a named node configuration to use for the Tailscale node:
 
 ```
 :80 {
-    bind tailscale/myapp
+  bind tailscale/myapp
 }
 ```
 
@@ -192,11 +209,11 @@ You will need to use the `tailscale+tls` bind protocol with a configuration like
 
 ```
 {
-    auto_https off
+  auto_https off
 }
 
 :443 {
-    bind tailscale+tls/myhost
+  bind tailscale+tls/myhost
 }
 ```
 
@@ -270,6 +287,8 @@ You can specify a named node configuration, or a default `caddy-proxy` node will
   }
 }
 ```
+
+Note that the node name is separated by a space, rather than a slash, as in the network listener.
 
 [Funnel]: https://tailscale.com/kb/1223/funnel
 

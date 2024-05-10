@@ -1,0 +1,48 @@
+# This config demonstrates using the authentication provider to pass
+# Tailscale user data from a Tailscale-aware reverse proxy to a
+# backend application that doesn't know anything about Tailscale.
+#
+# Run this configuration and then visit <http://caddytest/>.
+#
+# If you have HTTPS enabled on your tailnet,
+# this example will also generate a TLS certificate
+# and be available at <https://caddytest.your-tailnet.ts.net>.
+
+{
+  order tailscale_auth after basicauth
+  auto_https off
+  tailscale {
+    ephemeral # create all nodes as ephemeral
+  }
+}
+
+# This site will register a new node named caddytest.
+# When a user visits <http://caddytest/>, they will be proxied to localhost:3333.
+# Their tailscale login (the local part of their email address) will
+# be added to the proxied request in the X-Webauth-User header.
+:80 {
+  bind tailscale/caddytest
+  tailscale_auth
+  reverse_proxy localhost:3333 {
+    header_up X-Webauth-User {http.auth.user.tailscale_login}
+  }
+}
+
+# This will run an identical site as above, but with TLS enabled.
+:443 {
+  bind tailscale+tls/caddytest
+  tailscale_auth
+  reverse_proxy localhost:3333 {
+    header_up X-Webauth-User {http.auth.user.tailscale_login}
+  }
+}
+
+# This is a regular site that doesn't know anything about Tailscale.
+# Imagine this is an application like Gitea or Grafana that supports
+# reverse proxy authentication by setting the X-Webauth-User header.
+# For this site, we'll simply print out the value of that header.
+# But for an actual application, this could immediately log the user in.
+:3333 {
+  templates
+  respond `Hello, {{.Req.Header.Get "X-Webauth-User"}}`
+}

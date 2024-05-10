@@ -1,0 +1,42 @@
+# This config demonstrates using the proxy transport to forward
+# requests to another node on your tailnet.
+#
+# This sets up two caddy sites, each with their own Tailscale node,
+# one configured as a proxy transport, and the other as a network listener.
+#
+# Run this configuration and then visit <http://localhost:8080/>.
+# Notice that the response is coming from the caddytest-server node,
+# by way of a reverse proxy through the caddytest-proxy node.
+
+{
+  tailscale {
+    ephemeral # create all nodes as ephemeral
+  }
+}
+
+# This site will run at <http://localhost:8080/>,
+# and proxy all requests to <http://caddytest-server>, which is configured below.
+#
+# For this demo, we're just listening on localhost,
+# but imagine this running on a public facing server with a public IP address and domain.
+# By proxying to a Tailscale node, you effectively have a self-hosted Tailscale Funnel,
+# with all of the power of Caddy's flexible configuration and control.
+:8080 {
+  reverse_proxy http://caddytest-server {
+    transport tailscale caddytest-proxy
+  }
+}
+
+# This site will run at <http://caddytest-server/>.
+# It is not accessible from other network interfaces,
+# but will accept traffic from other nodes on the tailnet.
+#
+# A word of caution: in this proxy example, the caddytest node will
+# see all traffic as coming from the caddytest-proxy node.
+# If this node were relying on the Tailscale identity of that node,
+# such as using the Tailscale auth provider,
+# then all proxied traffic would have that identity.
+:80 {
+  bind tailscale/caddytest-server
+  respond "Hello, from caddytest-server"
+}
