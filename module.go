@@ -42,11 +42,7 @@ func getPlainListener(c context.Context, _ string, addr string, _ net.ListenConf
 	if network == "" {
 		network = "tcp"
 	}
-
-	ln := &tailscaleNode{
-		Server: s.Server,
-	}
-	return ln.Listen(network, ":"+port)
+	return s.Listen(network, ":"+port)
 }
 
 func getTLSListener(c context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
