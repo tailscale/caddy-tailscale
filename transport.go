@@ -7,6 +7,7 @@ import (
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
+	"github.com/caddyserver/caddy/v2/modules/caddyhttp/reverseproxy"
 )
 
 func init() {
@@ -18,6 +19,10 @@ type Transport struct {
 	Name string `json:"name,omitempty"`
 
 	node *tailscaleNode
+
+	// A non-nil TLS config enables TLS.
+	// We do not currently use the config values for anything.
+	TLS *reverseproxy.TLSConfig `json:"tls,omitempty"`
 }
 
 func (t *Transport) CaddyModule() caddy.ModuleInfo {
@@ -64,14 +69,30 @@ func (t *Transport) Cleanup() error {
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.URL.Scheme == "" {
-		req.URL.Scheme = "http"
+		if t.TLSEnabled() {
+			req.URL.Scheme = "https"
+		} else {
+			req.URL.Scheme = "http"
+		}
 	}
 	return t.node.HTTPClient().Transport.RoundTrip(req)
 }
 
+// TLSEnabled returns true if TLS is enabled.
+func (h Transport) TLSEnabled() bool {
+	return h.TLS != nil
+}
+
+// EnableTLS enables TLS on the transport.
+func (h *Transport) EnableTLS(config *reverseproxy.TLSConfig) error {
+	h.TLS = config
+	return nil
+}
+
 var (
-	_ http.RoundTripper     = (*Transport)(nil)
-	_ caddy.Provisioner     = (*Transport)(nil)
-	_ caddy.CleanerUpper    = (*Transport)(nil)
-	_ caddyfile.Unmarshaler = (*Transport)(nil)
+	_ http.RoundTripper         = (*Transport)(nil)
+	_ caddy.Provisioner         = (*Transport)(nil)
+	_ caddy.CleanerUpper        = (*Transport)(nil)
+	_ caddyfile.Unmarshaler     = (*Transport)(nil)
+	_ reverseproxy.TLSTransport = (*Transport)(nil)
 )
