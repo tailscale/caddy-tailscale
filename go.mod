@@ -4,7 +4,9 @@ go 1.22.0
 
 require (
 	github.com/caddyserver/caddy/v2 v2.8.4
+	github.com/caddyserver/certmagic v0.21.3
 	github.com/google/go-cmp v0.6.0
+	github.com/tailscale/tscert v0.0.0-20240517230440-bbccfbf48933
 	go.uber.org/zap v1.27.0
 	tailscale.com v1.67.0-pre.0.20240602211424-42cfbf427c67
 )
@@ -36,7 +38,6 @@ require (
 	github.com/aws/smithy-go v1.20.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.13.0 // indirect
-	github.com/caddyserver/certmagic v0.21.3 // indirect
 	github.com/caddyserver/zerossl v0.1.3 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
@@ -139,7 +140,6 @@ require (
 	github.com/tailscale/hujson v0.0.0-20221223112325-20486734a56a // indirect
 	github.com/tailscale/netlink v1.1.1-0.20211101221916-cabfb018fe85 // indirect
 	github.com/tailscale/peercred v0.0.0-20240214030740-b535050b2aa4 // indirect
-	github.com/tailscale/tscert v0.0.0-20240517230440-bbccfbf48933 // indirect
 	github.com/tailscale/web-client-prebuilt v0.0.0-20240226180453-5db17b287bf1 // indirect
 	github.com/tailscale/wireguard-go v0.0.0-20240429185444-03c5a0ccf754 // indirect
 	github.com/tcnksm/go-httpstat v0.2.0 // indirect

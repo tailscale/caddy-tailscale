@@ -17,6 +17,8 @@ import (
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+	"github.com/caddyserver/certmagic"
+	"github.com/tailscale/tscert"
 	"go.uber.org/zap"
 	"tailscale.com/tsnet"
 )
@@ -26,6 +28,11 @@ func init() {
 	caddy.RegisterNetwork("tailscale+tls", getTLSListener)
 	caddy.RegisterNetwork("tailscale/udp", getUDPListener)
 	caddyhttp.RegisterNetworkHTTP3("tailscale", "tailscale/udp")
+
+	// Caddy uses tscert to get certificates for Tailscale hostnames.
+	// Update the tscert dialer to dial the LocalAPI of the correct tsnet node,
+	// rather than just always dialing the local tailscaled.
+	tscert.TailscaledDialer = localAPIDialer
 }
 
 func getTCPListener(c context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
@@ -303,4 +310,42 @@ func (t *tsnetServerListener) Close() error {
 	// If usage reaches zero, then the node is actually shutdown.
 	_, err := nodes.Delete(t.name)
 	return err
+}
+
+// localAPIDialer finds the node that matches the requested certificate in ctx
+// and dials that node's local API.
+// If no matching node is found, the default dialer is used,
+// which tries to connect to a local tailscaled on the machine.
+func localAPIDialer(ctx context.Context, network, addr string) (net.Conn, error) {
+	if addr != "local-tailscaled.sock:80" {
+		return nil, fmt.Errorf("unexpected URL address %q", addr)
+	}
+
+	clientHello, ok := ctx.Value(certmagic.ClientHelloInfoCtxKey).(*tls.ClientHelloInfo)
+	if !ok || clientHello == nil {
+		return tscert.DialLocalAPI(ctx, network, addr)
+	}
+
+	var tn *tailscaleNode
+	nodes.Range(func(key, value any) bool {
+		if n, ok := value.(*tailscaleNode); ok && n != nil {
+			for _, d := range n.CertDomains() {
+				// Tailscale doesn't do wildcard certs, but caddy uses MatchWildcard
+				// for the built-in Tailscale cert manager, so we do so here as well.
+				if certmagic.MatchWildcard(clientHello.ServerName, d) {
+					tn = n
+					return false
+				}
+			}
+		}
+		return true
+	})
+
+	if tn != nil {
+		if lc, err := tn.LocalClient(); err == nil {
+			return lc.Dial(ctx, network, addr)
+		}
+	}
+
+	return tscert.DialLocalAPI(ctx, network, addr)
 }

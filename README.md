@@ -33,7 +33,7 @@ In those cases, this plugin may be helpful.
 
 Use [xcaddy](https://github.com/caddyserver/xcaddy) to build Caddy with the Tailscale plugin included.
 
-```
+```sh
 xcaddy build v2.8.4 --with github.com/tailscale/caddy-tailscale
 ```
 
@@ -149,7 +149,7 @@ For Caddy [JSON config], add the `tailscale` app with fields from [tscaddy.App]:
 The provided network listener allows privately serving sites on your tailnet.
 Configure a site block as usual, and use the [bind] directive to specify a tailscale network address:
 
-```
+```caddyfile
 :80 {
   bind tailscale/
 }
@@ -158,7 +158,7 @@ Configure a site block as usual, and use the [bind] directive to specify a tails
 The trailing slash is required.
 You can also specify a named node configuration to use for the Tailscale node:
 
-```
+```caddyfile
 :80 {
   bind tailscale/myapp
 }
@@ -186,7 +186,7 @@ If using the Caddy JSON configuration, specify a "tailscale/" network in your li
 Caddy will join your Tailscale network and listen only on that network interface.
 Multiple addresses can be specified if you want to listen on different Tailscale nodes as well as a local address:
 
-```
+```caddyfile
 :80 {
   bind tailscale/myhost tailscale/my-other-host localhost
 }
@@ -194,7 +194,7 @@ Multiple addresses can be specified if you want to listen on different Tailscale
 
 Different sites can be configured to join the network as different nodes:
 
-```
+```caddyfile
 :80 {
   bind tailscale/myhost
 }
@@ -206,7 +206,7 @@ Different sites can be configured to join the network as different nodes:
 
 Or they can be served on different ports of the same Tailscale node:
 
-```
+```caddyfile
 :80 {
   bind tailscale/myhost
 }
@@ -220,21 +220,31 @@ Or they can be served on different ports of the same Tailscale node:
 
 ### HTTPS support
 
-At this time, the Tailscale plugin for Caddy doesn't support using Caddy's native HTTPS resolvers.
-You will need to use the `tailscale+tls` bind protocol with a configuration like this:
+Caddy's automatic HTTPS support can be used with the Tailscale network listener like any other site.
+Caddy will use [Tailscale's HTTPS support] to issue certificates for your node's hostname.
+If the site address includes the full `ts.net` hostname, no additional configuration is necessary:
 
-```
-{
-  auto_https off
+```caddyfile
+https://myhost.tail1234.ts.net {
+  bind tailscale/myhost
 }
+```
 
+If the site address does not include the full hostname, specify the `tailscale` cert manager:
+
+```caddyfile
 :443 {
-  bind tailscale+tls/myhost
+  bind tailscale/myhost
+  tls {
+    get_certificate tailscale
+  }
 }
 ```
 
-Please note that because you currently need to turn `auto_https` support off,
-you may want to run a separate Caddy instance for sites that do need `auto_https`.
+This plugin previously used a `tailcale+tls` network listener that required disabling caddy's `auto_https` feature.
+That is no longer required nor recommended and will be removed in a future version.
+
+[Tailscale's HTTPS support]: https://tailscale.com/kb/1153/enabling-https
 
 ## Authentication provider
 
@@ -316,7 +326,7 @@ and will enforce Tailscale authentication and map user values to HTTP headers.
 
 For example:
 
-```
+```sh
 xcaddy tailscale-proxy --from "tailscale/myhost:80" --to localhost:8000
 ```
 

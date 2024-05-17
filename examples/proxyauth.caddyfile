@@ -30,7 +30,10 @@
 
 # This will run an identical site as above, but with TLS enabled.
 :443 {
-  bind tailscale+tls/caddytest
+  bind tailscale/caddytest
+  tls {
+    get_certificate tailscale
+  }
   tailscale_auth
   reverse_proxy localhost:3333 {
     header_up X-Webauth-User {http.auth.user.tailscale_login}
