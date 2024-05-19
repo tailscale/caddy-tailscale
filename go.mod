@@ -6,7 +6,7 @@ require (
 	github.com/caddyserver/caddy/v2 v2.7.3
 	github.com/google/go-cmp v0.6.0
 	go.uber.org/zap v1.26.0
-	tailscale.com v1.67.0-pre.0.20240510224123-fc1ae97e1037
+	tailscale.com v1.67.0-pre.0.20240602211424-42cfbf427c67
 )
 
 require (
@@ -67,7 +67,7 @@ require (
 	github.com/google/cel-go v0.15.1 // indirect
 	github.com/google/nftables v0.2.1-0.20240414091927-5e242ec57806 // indirect
 	github.com/google/pprof v0.0.0-20230808223545-4887780b67fb // indirect
-	github.com/google/uuid v1.5.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/csrf v1.7.2 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/hdevalence/ed25519consensus v0.2.0 // indirect
@@ -109,6 +109,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.11.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.21 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/prometheus-community/pro-bing v0.4.0 // indirect
 	github.com/prometheus/client_golang v1.18.0 // indirect
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.46.0 // indirect

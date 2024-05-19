@@ -9,21 +9,26 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/caddyserver/caddy/v2"
+	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"go.uber.org/zap"
 	"tailscale.com/tsnet"
 )
 
 func init() {
-	caddy.RegisterNetwork("tailscale", getPlainListener)
+	caddy.RegisterNetwork("tailscale", getTCPListener)
 	caddy.RegisterNetwork("tailscale+tls", getTLSListener)
+	caddy.RegisterNetwork("tailscale/udp", getUDPListener)
+	caddyhttp.RegisterNetworkHTTP3("tailscale", "tailscale/udp")
 }
 
-func getPlainListener(c context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
+func getTCPListener(c context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
 	ctx, ok := c.(caddy.Context)
 	if !ok {
 		return nil, fmt.Errorf("context is not a caddy.Context: %T", c)
@@ -76,6 +81,43 @@ func getTLSListener(c context.Context, _ string, addr string, _ net.ListenConfig
 	})
 
 	return ln, nil
+}
+
+func getUDPListener(c context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
+	ctx, ok := c.(caddy.Context)
+	if !ok {
+		return nil, fmt.Errorf("context is not a caddy.Context: %T", c)
+	}
+
+	network, host, port, err := caddy.SplitNetworkAddress(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	s, err := getNode(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+
+	st, err := s.Up(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	if network == "" {
+		network = "udp4"
+
+	}
+	var ap netip.AddrPort
+	for _, ip := range st.TailscaleIPs {
+		// TODO(will): watch for Tailscale IP changes and update listener
+		if (network == "udp4" && ip.Is4()) || (network == "udp6" && ip.Is6()) {
+			p, _ := strconv.Atoi(port)
+			ap = netip.AddrPortFrom(ip, uint16(p))
+			break
+		}
+	}
+	return s.Server.ListenPacket(network, ap.String())
 }
 
 // nodes are the Tailscale nodes that have been configured and started.
