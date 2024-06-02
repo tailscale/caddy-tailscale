@@ -2,16 +2,32 @@
 
 [![status: experimental](https://img.shields.io/badge/status-experimental-blue)](https://tailscale.com/kb/1167/release-stages/#experimental)
 
-The Tailscale plugin for Caddy brings Tailscale integration to the Caddy web server.
+The Tailscale plugin for Caddy allows running a Tailscale node directly inside of the Caddy web server.
+This allows a caddy server to join your Tailscale network directly without needing a separate Tailscale client.
+
 It's really a collection of plugins, providing:
 
-- the ability for a Caddy server to directly join your Tailscale network without needing a separate Tailscale client
 - a Caddy network listener, to serve sites privately on your tailnet
 - a Caddy proxy transport, to proxy requests to another device on your tailnet
 - a Caddy authentication provider, to pass a user's Tailscale identity to an application
 - a Caddy subcommand, to quickly setup a reverse-proxy using either or both of the network listener or authentication provider
 
 This plugin is still very experimental.
+
+## Why
+
+It's important to note that you don't necessarily need this plugin to use Caddy with Tailscale.
+With Tailscale [installed] on a machine, Caddy can already bind to the Tailscale network interface,
+proxy requests to other Tailnet nodes, get [automatic certificates], and [authenticate Tailscale users].
+
+However, there may be cases where it is inconvenient to install Tailscale on a machine,
+and it would be preferable to have everything self-contained in the single caddy binary.
+Or, you may want to serve multiple sites, each connected as a separate Tailnet node.
+In those cases, this plugin may be helpful.
+
+[installed]: https://tailscale.com/download
+[automatic certificates]: https://caddyserver.com/docs/automatic-https#activation
+[authenticate Tailscale users]: https://caddyserver.com/docs/caddyfile/directives/forward_auth#tailscale
 
 ## Installation
 
