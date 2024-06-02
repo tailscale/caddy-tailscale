@@ -66,7 +66,9 @@ func Test_GetAuthKey(t *testing.T) {
 				DefaultAuthKey: tt.defaultKey,
 				Nodes:          make(map[string]Node),
 			}
-			app.Provision(caddy.Context{})
+			if err := app.Provision(caddy.Context{}); err != nil {
+				t.Fatal(err)
+			}
 			if tt.hostKey != "" {
 				app.Nodes[host] = Node{
 					AuthKey: tt.hostKey,
@@ -127,7 +129,9 @@ func Test_GetControlURL(t *testing.T) {
 					ControlURL: tt.nodeURL,
 				}
 			}
-			app.Provision(caddy.Context{})
+			if err := app.Provision(caddy.Context{}); err != nil {
+				t.Fatal(err)
+			}
 			for k, v := range tt.env {
 				t.Setenv(k, v)
 			}
@@ -149,7 +153,9 @@ func Test_GetEphemeral(t *testing.T) {
 			"not-ephemeral": {Ephemeral: opt.NewBool(false)},
 		},
 	}
-	app.Provision(caddy.Context{})
+	if err := app.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
 
 	// node without named config gets the app-level ephemeral setting
 	if got, want := getEphemeral("noconfig", app), true; got != want {
@@ -197,7 +203,9 @@ func Test_GetHostname(t *testing.T) {
 			app := &App{Nodes: map[string]Node{
 				nodeName: {Hostname: tt.hostname},
 			}}
-			app.Provision(caddy.Context{})
+			if err := app.Provision(caddy.Context{}); err != nil {
+				t.Fatal(err)
+			}
 			for k, v := range tt.env {
 				t.Setenv(k, v)
 			}
@@ -245,7 +253,9 @@ func Test_GetStateDir(t *testing.T) {
 					StateDir: tt.nodeDir,
 				}
 			}
-			app.Provision(caddy.Context{})
+			if err := app.Provision(caddy.Context{}); err != nil {
+				t.Fatal(err)
+			}
 			for k, v := range tt.env {
 				t.Setenv(k, v)
 			}
@@ -267,7 +277,9 @@ func Test_GetWebUI(t *testing.T) {
 			"no-webui": {WebUI: opt.NewBool(false)},
 		},
 	}
-	app.Provision(caddy.Context{})
+	if err := app.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
 
 	// node without named config gets the app-level webui setting
 	if got, want := getWebUI("noconfig", app), true; got != want {
