@@ -25,6 +25,7 @@
   tailscale_auth
   reverse_proxy localhost:3333 {
     header_up X-Webauth-User {http.auth.user.tailscale_login}
+    header_up X-Tailscale-Tailnet {http.auth.user.tailscale_tailnet}
   }
 }
 
@@ -37,6 +38,7 @@
   tailscale_auth
   reverse_proxy localhost:3333 {
     header_up X-Webauth-User {http.auth.user.tailscale_login}
+    header_up X-Tailscale-Tailnet {http.auth.user.tailscale_tailnet}
   }
 }
 
@@ -47,5 +49,5 @@
 # But for an actual application, this could immediately log the user in.
 :3333 {
   templates
-  respond `Hello, {{.Req.Header.Get "X-Webauth-User"}}`
+  respond `Hello, {{.Req.Header.Get "X-Webauth-User"}} from {{.Req.Header.Get "X-Tailscale-Tailnet"}}`
 }
