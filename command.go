@@ -68,6 +68,7 @@ default, all incoming headers are passed through unmodified.)
 			fs.Bool("change-host-header", false, "Set upstream Host header to address of upstream")
 			fs.Bool("insecure", false, "Disable TLS verification (WARNING: DISABLES SECURITY BY NOT VERIFYING SSL CERTIFICATES!)")
 			fs.Bool("internal-certs", false, "Use internal CA for issuing certs")
+			fs.Bool("debug", false, "Enable debug logging")
 			return fs
 		}(),
 	})
@@ -81,6 +82,7 @@ func cmdTailscaleProxy(fs caddycmd.Flags) (int, error) {
 	changeHost := fs.Bool("change-host-header")
 	insecure := fs.Bool("insecure")
 	internalCerts := fs.Bool("internal-certs")
+	debug := fs.Bool("debug")
 
 	httpPort := strconv.Itoa(caddyhttp.DefaultHTTPPort)
 	httpsPort := strconv.Itoa(caddyhttp.DefaultHTTPSPort)
@@ -205,6 +207,15 @@ func cmdTailscaleProxy(fs caddycmd.Flags) (int, error) {
 			},
 		}
 		appsRaw["tls"] = caddyconfig.JSON(tlsApp, nil)
+	} else if tsBind {
+		tlsApp := caddytls.TLS{
+			Automation: &caddytls.AutomationConfig{
+				Policies: []*caddytls.AutomationPolicy{{
+					ManagersRaw: []json.RawMessage{json.RawMessage(`{"via": "tailscale"}`)},
+				}},
+			},
+		}
+		appsRaw["tls"] = caddyconfig.JSON(tlsApp, nil)
 	}
 
 	var false bool
@@ -215,6 +226,17 @@ func cmdTailscaleProxy(fs caddycmd.Flags) (int, error) {
 			},
 		},
 		AppsRaw: appsRaw,
+	}
+	if debug {
+		cfg.Logging = &caddy.Logging{
+			Logs: map[string]*caddy.CustomLog{
+				"default": {
+					BaseLog: caddy.BaseLog{
+						Level: "DEBUG",
+					},
+				},
+			},
+		}
 	}
 
 	err = caddy.Run(cfg)

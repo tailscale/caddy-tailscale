@@ -10,7 +10,6 @@
 
 {
   order tailscale_auth after basicauth
-  auto_https off
   tailscale {
     ephemeral # create all nodes as ephemeral
   }
