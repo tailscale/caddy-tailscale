@@ -98,10 +98,7 @@ func (ta Auth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.U
 	var tailnet string
 	if !info.Node.Hostinfo.ShareeNode() {
 		if s, found := strings.CutPrefix(info.Node.Name, info.Node.ComputedName+"."); found {
-			// TODO(will): Update this for current ts.net magicdns hostnames.
-			if s, found := strings.CutSuffix(s, ".beta.tailscale.net."); found {
-				tailnet = s
-			}
+			tailnet = strings.TrimSuffix(s, ".")
 		}
 	}
 
