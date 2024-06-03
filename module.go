@@ -20,6 +20,7 @@ import (
 	"github.com/caddyserver/certmagic"
 	"github.com/tailscale/tscert"
 	"go.uber.org/zap"
+	"tailscale.com/hostinfo"
 	"tailscale.com/tsnet"
 )
 
@@ -33,6 +34,7 @@ func init() {
 	// Update the tscert dialer to dial the LocalAPI of the correct tsnet node,
 	// rather than just always dialing the local tailscaled.
 	tscert.TailscaledDialer = localAPIDialer
+	hostinfo.SetApp("caddy")
 }
 
 func getTCPListener(c context.Context, _ string, addr string, _ net.ListenConfig) (any, error) {
