@@ -19,6 +19,7 @@ import (
 func init() {
 	caddy.RegisterModule(Auth{})
 	httpcaddyfile.RegisterHandlerDirective("tailscale_auth", parseAuthConfig)
+	httpcaddyfile.RegisterDirectiveOrder("tailscale_auth", httpcaddyfile.After, "basicauth")
 }
 
 // Auth is an HTTP authentication provider that authenticates users based on their Tailscale identity.

@@ -9,7 +9,6 @@
 # and be available at <https://caddytest.your-tailnet.ts.net>.
 
 {
-  order tailscale_auth after basicauth
   tailscale {
     ephemeral # create all nodes as ephemeral
   }
