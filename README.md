@@ -47,8 +47,7 @@ See the comments in the individual files for details.
 Run them with:
 
 ```
-TS_AUTHKEY=<tskey-auth-XXXXX> \
-./caddy run -a caddyfile -c examples/<file>
+TS_AUTHKEY=<tskey-auth-XXXXX> ./caddy run -c examples/<file>
 ```
 
 [examples directory]: ./examples/
