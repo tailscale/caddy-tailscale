@@ -253,14 +253,9 @@ as well as set various fields on the Caddy user object that can be passed to app
 For sites listening only on the Tailscale network interface,
 user access will already be enforced by the tailnet access controls.
 
-Set the [order] directive in your global options to instruct Caddy when to process `tailscale_auth`.
 For example, in a Caddyfile:
 
 ```caddyfile
-{
-  order tailscale_auth after basicauth
-}
-
 :80 {
   tailscale_auth
 }
@@ -294,7 +289,6 @@ You might have something like the following in your Caddyfile:
 When used with a Tailscale listener (described above), that Tailscale node is used to identify the remote user.
 Otherwise, the authentication provider will attempt to connect to the Tailscale daemon running on the local machine.
 
-[order]: https://caddyserver.com/docs/caddyfile/options#order
 [Gitea]: https://docs.gitea.com/usage/authentication#reverse-proxy
 [Grafana]: https://grafana.com/docs/grafana/latest/setup-grafana/configure-security/configure-authentication/auth-proxy/
 

@@ -5,7 +5,6 @@
 # Run this configuration and then visit <http://caddytest/>.
 
 {
-  order tailscale_auth after basicauth
   tailscale {
     ephemeral # create all nodes as ephemeral
   }
