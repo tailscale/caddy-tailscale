@@ -1,3 +1,6 @@
+// Copyright (c) Tailscale Inc & AUTHORS
+// SPDX-License-Identifier: Apache-2.0
+
 // Package tscaddy provides a set of Caddy modules to integrate Tailscale into Caddy.
 package tscaddy
 
