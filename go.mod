@@ -6,7 +6,7 @@ require (
 	github.com/caddyserver/caddy/v2 v2.8.4
 	github.com/caddyserver/certmagic v0.21.3
 	github.com/google/go-cmp v0.6.0
-	github.com/tailscale/tscert v0.0.0-20240517230440-bbccfbf48933
+	github.com/tailscale/tscert v0.0.0-20240608151842-d3f834017e53
 	go.uber.org/zap v1.27.0
 	tailscale.com v1.67.0-pre.0.20240602211424-42cfbf427c67
 )

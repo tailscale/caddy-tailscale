@@ -12,17 +12,20 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/http"
 	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/caddyserver/certmagic"
 	"github.com/tailscale/tscert"
 	"go.uber.org/zap"
+	"tailscale.com/client/tailscale"
 	"tailscale.com/hostinfo"
 	"tailscale.com/tsnet"
 )
@@ -34,9 +37,9 @@ func init() {
 	caddyhttp.RegisterNetworkHTTP3("tailscale", "tailscale/udp")
 
 	// Caddy uses tscert to get certificates for Tailscale hostnames.
-	// Update the tscert dialer to dial the LocalAPI of the correct tsnet node,
-	// rather than just always dialing the local tailscaled.
-	tscert.TailscaledDialer = localAPIDialer
+	// Update the tscert transport to send requests to the correct tsnet server,
+	// rather than just always connecting to the local machine's tailscaled.
+	tscert.TailscaledTransport = &tsnetMuxTransport{}
 	hostinfo.SetApp("caddy")
 }
 
@@ -317,40 +320,53 @@ func (t *tsnetServerListener) Close() error {
 	return err
 }
 
-// localAPIDialer finds the node that matches the requested certificate in ctx
-// and dials that node's local API.
-// If no matching node is found, the default dialer is used,
-// which tries to connect to a local tailscaled on the machine.
-func localAPIDialer(ctx context.Context, network, addr string) (net.Conn, error) {
-	if addr != "local-tailscaled.sock:80" {
-		return nil, fmt.Errorf("unexpected URL address %q", addr)
-	}
+// tsnetMuxTransport is an [http.RoundTripper] that sends requests to the LocalAPI
+// for the tsnet server that matches the ClientHelloInfo server name.
+// If no tsnet server matches, a default Transport is used.
+type tsnetMuxTransport struct {
+	defaultTransport     *http.Transport
+	defaultTransportOnce sync.Once
+}
+
+func (t *tsnetMuxTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	ctx := req.Context()
+	var rt http.RoundTripper
 
 	clientHello, ok := ctx.Value(certmagic.ClientHelloInfoCtxKey).(*tls.ClientHelloInfo)
-	if !ok || clientHello == nil {
-		return tscert.DialLocalAPI(ctx, network, addr)
-	}
-
-	var tn *tailscaleNode
-	nodes.Range(func(key, value any) bool {
-		if n, ok := value.(*tailscaleNode); ok && n != nil {
-			for _, d := range n.CertDomains() {
-				// Tailscale doesn't do wildcard certs, but caddy uses MatchWildcard
-				// for the built-in Tailscale cert manager, so we do so here as well.
-				if certmagic.MatchWildcard(clientHello.ServerName, d) {
-					tn = n
-					return false
+	if ok && clientHello != nil {
+		nodes.Range(func(key, value any) bool {
+			if n, ok := value.(*tailscaleNode); ok && n != nil {
+				for _, d := range n.CertDomains() {
+					// Tailscale doesn't do wildcard certs, but caddy uses MatchWildcard
+					// for the built-in Tailscale cert manager, so we do so here as well.
+					if certmagic.MatchWildcard(clientHello.ServerName, d) {
+						if lc, err := n.LocalClient(); err == nil {
+							rt = &localAPITransport{lc}
+						}
+						return false
+					}
 				}
 			}
-		}
-		return true
-	})
-
-	if tn != nil {
-		if lc, err := tn.LocalClient(); err == nil {
-			return lc.Dial(ctx, network, addr)
-		}
+			return true
+		})
 	}
 
-	return tscert.DialLocalAPI(ctx, network, addr)
+	if rt == nil {
+		t.defaultTransportOnce.Do(func() {
+			t.defaultTransport = &http.Transport{
+				DialContext: tscert.TailscaledDialer,
+			}
+		})
+		rt = t.defaultTransport
+	}
+	return rt.RoundTrip(req)
+}
+
+// localAPITransport is an [http.RoundTripper] that sends requests to a [tailscale.LocalClient]'s LocalAPI.
+type localAPITransport struct {
+	*tailscale.LocalClient
+}
+
+func (t *localAPITransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return t.DoLocalRequest(req)
 }
