@@ -1,3 +1,6 @@
+// Copyright (c) Tailscale Inc & AUTHORS
+// SPDX-License-Identifier: Apache-2.0
+
 package tscaddy
 
 // app.go contains App and Node, which provide global configuration for registering Tailscale nodes.
