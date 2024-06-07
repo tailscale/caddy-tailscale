@@ -43,30 +43,6 @@ Alternatively, you can build the included `cmd/caddy` package, or create your ow
 go build ./cmd/caddy
 ```
 
-### Docker Builds
-
-Caddy provides [builder docker images] (e.g. `caddy:2.9-builder`) that have xcaddy pre-installed.
-These can be used to build caddy-tailscale in a docker container,
-but may result in issues with the Go version used for the build due to project release cycles.
-
-The caddy builder images are built with the specific Go version that was used for that Caddy version.
-If a new version of Go has been released, that will not be reflected until a future Caddy release.
-Tailscale, and by extension the caddy-tailscale plugin, adopts new Go versions much more quickly,
-which may result in a caddy-tailscale version requiring a more recent version of Go than is in the caddy builder image.
-
-This can be addressed in two ways:
-
-1. don't use the caddy builder images directly, but install xcaddy in a newer Go build image
-   as [discussed in this comment].
-2. unset the `GOTOOLCHAIN` environment variable so that Go is able to upgrade itself:
-
-   ```sh
-   docker run -e GOTOOLCHAIN= -i -t --rm docker.io/caddy:2.9-builder sh -c "xcaddy build --with github.com/tailscale/caddy-tailscale@fd3f49d73216641b9cbe9167bbb05250c0ffc6d6"
-   ```
-
-[builder docker images]: https://hub.docker.com/_/caddy
-[discussed in this comment]: https://github.com/tailscale/caddy-tailscale/issues/34#issuecomment-2145764893
-
 ### Running examples
 
 Multiple example configurations are provided in the [examples directory].
@@ -76,11 +52,30 @@ See the comments in the individual files for details.
 
 Run them with:
 
-```
+```sh
 TS_AUTHKEY=<tskey-auth-XXXXX> ./caddy run -c examples/<file>
 ```
 
 [examples directory]: ./examples/
+
+### Docker
+
+caddy-tailscale includes a Dockerfile for building a Caddy image with the plugin included.
+This can be built manually, or you can use the pre-built image with:
+
+```sh
+docker run -it -rm ghcr.io/tailscale/caddy-tailscale
+```
+
+Mount a custom Caddyfile to `/etc/caddy/Caddyfile` and optionally mount a volume
+to `/config` to persist the default Tailscale state directory:
+
+```sh
+docker run -it -rm \
+  -e TS_AUTHKEY="tskey-auth-XXX" \
+  -v ./custom.caddyfile:/etc/caddy/Caddyfile -v ./config:config \
+  ghcr.io/tailscale/caddy-tailscale
+```
 
 ## Configuration
 
