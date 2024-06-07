@@ -37,6 +37,12 @@ Use [xcaddy](https://github.com/caddyserver/xcaddy) to build Caddy with the Tail
 xcaddy build v2.8.4 --with github.com/tailscale/caddy-tailscale
 ```
 
+Alternatively, you can build the included `cmd/caddy` package:
+
+```sh
+go build ./cmd/caddy
+```
+
 ### Running examples
 
 Multiple example configurations are provided in the [examples directory].
