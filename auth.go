@@ -52,11 +52,13 @@ func (ta *Auth) client(r *http.Request) (*tailscale.LocalClient, error) {
 	// server.
 	server := r.Context().Value(caddyhttp.ServerCtxKey).(*caddyhttp.Server)
 	for _, listener := range server.Listeners() {
-		if tsl, ok := listener.(tsnetListener); ok {
-			var err error
-			ta.localclient, err = tsl.Server().LocalClient()
-			if err != nil {
-				return nil, err
+		if tsServerListener, ok := listener.(*tsnetServerListener); ok {
+			if tsl, ok := tsServerListener.Listener.(tsnetListener); ok {
+				var err error
+				ta.localclient, err = tsl.Server().LocalClient()
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
