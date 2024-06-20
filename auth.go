@@ -45,6 +45,9 @@ func (Auth) CaddyModule() caddy.ModuleInfo {
 // findTsnetListener recursively searches ln for embedded child net.Listener structs
 // until it finds the tsnetListener or runs out.
 // the 2nd return value is true if it was found, false if it wasn't.
+//
+// In the future consider alternative approach if Caddy supports unwrapping listeners.
+// See discussion in https://github.com/tailscale/caddy-tailscale/pull/70
 func findTsnetListener(ln net.Listener) (tsnetListener, bool) {
 	// if the input is a tsnetListener, return it.
 	if tsn, ok := ln.(tsnetListener); ok {
