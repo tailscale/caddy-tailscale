@@ -42,24 +42,32 @@ func (Auth) CaddyModule() caddy.ModuleInfo {
 	}
 }
 
-// findTsnetListener recursively searches ln for embedded child net.Listener structs
-// until it finds the tsnetListener or runs out.
-// the 2nd return value is true if it was found, false if it wasn't.
+// findTsnetListener recursively searches ln for wrapped or embedded net.Listeners
+// until it finds a tsnetListener or runs out.
+// ok indicates if a tsnetListener was found.
 //
 // In the future consider alternative approach if Caddy supports unwrapping listeners.
 // See discussion in https://github.com/tailscale/caddy-tailscale/pull/70
-func findTsnetListener(ln net.Listener) (tsnetListener, bool) {
-	// if the input is a tsnetListener, return it.
+func findTsnetListener(ln net.Listener) (_ tsnetListener, ok bool) {
+	if ln == nil {
+		return nil, false
+	}
+
+	// if ln is a tsnetListener, return it.
 	if tsn, ok := ln.(tsnetListener); ok {
 		return tsn, true
 	}
 
+	// if ln is a wrappedListener, unwrap it.
+	if wl, ok := ln.(wrappedListener); ok {
+		return findTsnetListener(wl.Unwrap())
+	}
+
+	// if ln has an embedded net.Listener field, unwrap it.
 	s := reflect.ValueOf(ln)
-	// make sure s is a struct instead of a pointer to one
 	if s.Kind() == reflect.Ptr {
 		s = s.Elem()
 	}
-
 	if s.Kind() != reflect.Struct {
 		return nil, false
 	}
@@ -70,12 +78,16 @@ func findTsnetListener(ln net.Listener) (tsnetListener, bool) {
 		return nil, false
 	}
 
-	// if the "Listener" child is a net.Listener, run the function again on its child.
-	if child, ok := innerLn.Interface().(net.Listener); ok {
-		return findTsnetListener(child)
+	// if the "Listener" field is a net.Listener, use it.
+	if wl, ok := innerLn.Interface().(net.Listener); ok {
+		return findTsnetListener(wl)
 	}
-
 	return nil, false
+}
+
+// wrappedListener is implemented by types that wrap net.Listeners.
+type wrappedListener interface {
+	Unwrap() net.Listener
 }
 
 // client returns the tailscale LocalClient for the TailscaleAuth module.

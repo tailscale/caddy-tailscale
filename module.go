@@ -306,6 +306,13 @@ type tsnetServerListener struct {
 	net.Listener
 }
 
+func (t *tsnetServerListener) Unwrap() net.Listener {
+	if t == nil {
+		return nil
+	}
+	return t.Listener
+}
+
 func (t *tsnetServerListener) Close() error {
 	if err := t.Listener.Close(); err != nil {
 		return err
