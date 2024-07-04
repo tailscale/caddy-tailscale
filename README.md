@@ -124,9 +124,10 @@ All configuration values are optional, though an [auth key] is strongly recommen
 If no auth key is present, one will be loaded from the default `$TS_AUTHKEY` environment variable.
 Failing that, it will log an auth URL to the Caddy log that can be used to register the node.
 
-After the node had been added to your network, you can restart Caddy without the debug logging.
 Unless the node is registered as `ephemeral`, the auth key is only needed on first run.
 Node state is stored in `state_dir` and reused when Caddy restarts.
+When running in a container, it is generally recommended to use `ephemeral` and always provide an auth key,
+or to mount the state directory on a persistent volume, depending on the use case.
 
 For Caddy [JSON config], add the `tailscale` app with fields from [tscaddy.App]:
 
@@ -253,11 +254,13 @@ That is no longer required nor recommended and will be removed in a future versi
 
 ## Authentication provider
 
-Setup the Tailscale authentication provider with `tailscale_auth` directive.
+Set up the Tailscale authentication provider with the `tailscale_auth` directive.
 The provider will enforce that all requests are coming from a Tailscale user,
 as well as set various fields on the Caddy user object that can be passed to applications.
 For sites listening only on the Tailscale network interface,
 user access will already be enforced by the tailnet access controls.
+The authentication provider currently only works with connections from user-owned devices.
+It does not currently support connections from [tagged devices].
 
 For example, in a Caddyfile:
 
@@ -295,13 +298,14 @@ You might have something like the following in your Caddyfile:
 When used with a Tailscale listener (described above), that Tailscale node is used to identify the remote user.
 Otherwise, the authentication provider will attempt to connect to the Tailscale daemon running on the local machine.
 
+[tagged devices]: https://tailscale.com/kb/1068/acl-tags
 [Gitea]: https://docs.gitea.com/usage/authentication#reverse-proxy
 [Grafana]: https://grafana.com/docs/grafana/latest/setup-grafana/configure-security/configure-authentication/auth-proxy/
 
 ## Proxy Transport
 
 The `tailscale` proxy transport allows using a Tailscale node to connect to a reverse proxy upstream.
-This might be useful proxy non-Tailscale traffic to node on your tailnet, similar to [Funnel].
+This might be useful to proxy non-Tailscale traffic to a node on your tailnet, similar to [Funnel].
 
 You can specify a named node configuration, or a default `caddy-proxy` node will be used.
 
