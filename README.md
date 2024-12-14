@@ -29,7 +29,7 @@ In those cases, this plugin may be helpful.
 [automatic certificates]: https://caddyserver.com/docs/automatic-https#activation
 [authenticate Tailscale users]: https://caddyserver.com/docs/caddyfile/directives/forward_auth#tailscale
 
-## Building
+## Installation
 
 Use [xcaddy](https://github.com/caddyserver/xcaddy) to build Caddy with the Tailscale plugin included.
 
@@ -37,34 +37,11 @@ Use [xcaddy](https://github.com/caddyserver/xcaddy) to build Caddy with the Tail
 xcaddy build v2.8.4 --with github.com/tailscale/caddy-tailscale
 ```
 
-Alternatively, you can build the included `cmd/caddy` package, or create your own similar package:
+Alternatively, you can build the included `cmd/caddy` package:
 
 ```sh
 go build ./cmd/caddy
 ```
-
-### Docker Builds
-
-Caddy provides [builder docker images] (e.g. `caddy:2.8-builder`) that have xcaddy pre-installed.
-These can be used to build caddy-tailscale in a docker container,
-but may result in issues with the Go version used for the build due to project release cycles.
-
-The caddy builder images are built with the specific Go version that was used for that Caddy version.
-If a new version of Go has been released, that will not be reflected until a future Caddy release.
-Tailscale, and by extension the caddy-tailscale plugin, adopts new Go versions much more quickly,
-which may result in a caddy-tailscale version requiring a more recent version of Go than is in the caddy builder image.
-
-This can be addressed in two ways:
-
-1.  don't use the caddy builder images directly, but install xcaddy in a newer Go build image
-    as [discussed in this comment].
-2.  unset the `GOTOOLCHAIN` environment variable so that Go is able to upgrade itself:
-    ```sh
-    docker run -e GOTOOLCHAIN= -i -t --rm caddy:2.7-builder sh -c "xcaddy build --with github.com/tailscale/caddy-tailscale@0f105e89fbe2222c690b94b5b0b2a8150fa2540f"
-    ```
-
-[builder docker images]: https://hub.docker.com/_/caddy
-[discussed in this comment]: https://github.com/tailscale/caddy-tailscale/issues/34#issuecomment-2145764893
 
 ### Running examples
 
