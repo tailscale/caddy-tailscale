@@ -138,7 +138,7 @@ func getUDPListener(c context.Context, network string, host string, portRange st
 		return nil, err
 	}
 
-	if network == "" {
+	if network == "" || network == "udp" {
 		network = "udp4"
 
 	}
