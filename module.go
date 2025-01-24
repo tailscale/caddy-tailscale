@@ -49,12 +49,12 @@ func getTCPListener(c context.Context, network string, host string, portRange st
 	if !ok {
 		return nil, fmt.Errorf("context is not a caddy.Context: %T", c)
 	}
-	
-	na, err := caddy.JoinNetworkAddress(network, host, portRange)
+
+	na, err := caddy.ParseNetworkAddress(caddy.JoinNetworkAddress(network, host, portRange))
 	if err != nil {
 		return nil, err
 	}
-	
+
 	addr := na.JoinHostPort(portOffset)
 	network, host, port, err := caddy.SplitNetworkAddress(addr)
 	if err != nil {
@@ -78,11 +78,11 @@ func getTLSListener(c context.Context, network string, host string, portRange st
 		return nil, fmt.Errorf("context is not a caddy.Context: %T", c)
 	}
 
-	na, err := caddy.JoinNetworkAddress(network, host, portRange)
+	na, err := caddy.ParseNetworkAddress(caddy.JoinNetworkAddress(network, host, portRange))
 	if err != nil {
 		return nil, err
 	}
-	
+
 	addr := na.JoinHostPort(portOffset)
 	network, host, port, err := caddy.SplitNetworkAddress(addr)
 	if err != nil {
@@ -117,11 +117,11 @@ func getUDPListener(c context.Context, network string, host string, portRange st
 		return nil, fmt.Errorf("context is not a caddy.Context: %T", c)
 	}
 
-	na, err := caddy.JoinNetworkAddress(network, host, portRange)
+	na, err := caddy.ParseNetworkAddress(caddy.JoinNetworkAddress(network, host, portRange))
 	if err != nil {
 		return nil, err
 	}
-	
+
 	addr := na.JoinHostPort(portOffset)
 	network, host, port, err := caddy.SplitNetworkAddress(addr)
 	if err != nil {
