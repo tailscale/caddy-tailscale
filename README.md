@@ -34,7 +34,7 @@ In those cases, this plugin may be helpful.
 Use [xcaddy](https://github.com/caddyserver/xcaddy) to build Caddy with the Tailscale plugin included.
 
 ```sh
-xcaddy build v2.8.4 --with github.com/tailscale/caddy-tailscale
+xcaddy build v2.9.1 --with github.com/tailscale/caddy-tailscale
 ```
 
 Alternatively, you can build the included `cmd/caddy` package, or create your own similar package:
@@ -45,7 +45,7 @@ go build ./cmd/caddy
 
 ### Docker Builds
 
-Caddy provides [builder docker images] (e.g. `caddy:2.8-builder`) that have xcaddy pre-installed.
+Caddy provides [builder docker images] (e.g. `caddy:2.9-builder`) that have xcaddy pre-installed.
 These can be used to build caddy-tailscale in a docker container,
 but may result in issues with the Go version used for the build due to project release cycles.
 
@@ -61,7 +61,7 @@ This can be addressed in two ways:
 2. unset the `GOTOOLCHAIN` environment variable so that Go is able to upgrade itself:
 
    ```sh
-   docker run -e GOTOOLCHAIN= -i -t --rm caddy:2.7-builder sh -c "xcaddy build --with github.com/tailscale/caddy-tailscale@0f105e89fbe2222c690b94b5b0b2a8150fa2540f"
+   docker run -e GOTOOLCHAIN= -i -t --rm docker.io/caddy:2.9-builder sh -c "xcaddy build --with github.com/tailscale/caddy-tailscale@fd3f49d73216641b9cbe9167bbb05250c0ffc6d6"
    ```
 
 [builder docker images]: https://hub.docker.com/_/caddy

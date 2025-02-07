@@ -23,9 +23,9 @@ jobs:
           go-version-file: go.mod
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@a4f60bb28d35aeee14e6880718e0c85ff1882e64 #v6.0.1
+        uses: golangci/golangci-lint-action@e60da84bfae8c7920a47be973d75e15710aa8bd7 #v6.3.0
         with:
-          version: v1.59.0
+          version: v1.63.4
 
           # Show only new issues if it's a pull request.
           only-new-issues: true
