@@ -56,12 +56,13 @@ which may result in a caddy-tailscale version requiring a more recent version of
 
 This can be addressed in two ways:
 
-1.  don't use the caddy builder images directly, but install xcaddy in a newer Go build image
-    as [discussed in this comment].
-2.  unset the `GOTOOLCHAIN` environment variable so that Go is able to upgrade itself:
-    ```sh
-    docker run -e GOTOOLCHAIN= -i -t --rm caddy:2.7-builder sh -c "xcaddy build --with github.com/tailscale/caddy-tailscale@0f105e89fbe2222c690b94b5b0b2a8150fa2540f"
-    ```
+1. don't use the caddy builder images directly, but install xcaddy in a newer Go build image
+   as [discussed in this comment].
+2. unset the `GOTOOLCHAIN` environment variable so that Go is able to upgrade itself:
+
+   ```sh
+   docker run -e GOTOOLCHAIN= -i -t --rm caddy:2.7-builder sh -c "xcaddy build --with github.com/tailscale/caddy-tailscale@0f105e89fbe2222c690b94b5b0b2a8150fa2540f"
+   ```
 
 [builder docker images]: https://hub.docker.com/_/caddy
 [discussed in this comment]: https://github.com/tailscale/caddy-tailscale/issues/34#issuecomment-2145764893
@@ -168,10 +169,23 @@ For Caddy [JSON config], add the `tailscale` app with fields from [tscaddy.App]:
 [global option]: https://caddyserver.com/docs/caddyfile/options
 [placeholders]: https://caddyserver.com/docs/conventions#placeholders
 [auth key]: https://tailscale.com/kb/1085/auth-keys/
-[debug option]: https://caddyserver.com/docs/caddyfile/options#debug
-[named logger]: https://caddyserver.com/docs/caddyfile/options#log
 [JSON config]: https://caddyserver.com/docs/json/
 [tscaddy.App]: https://pkg.go.dev/github.com/tailscale/caddy-tailscale#App
+
+### Logging
+
+Tailscale logs as the `tailscale` named Caddy logger.
+To customize logging level or output, use the [log global option]:
+
+```caddyfile
+{
+  log tailscale {
+    level DEBUG
+  }
+}
+```
+
+[log global option]: https://caddyserver.com/docs/caddyfile/options#log
 
 ## Network listener
 
