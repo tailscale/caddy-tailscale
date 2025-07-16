@@ -138,19 +138,44 @@ func getUDPListener(c context.Context, network string, host string, portRange st
 		return nil, err
 	}
 
-	if network == "" || network == "udp" {
-		network = "udp4"
-
+	if network == "" {
+		network = "udp"
 	}
+
 	var ap netip.AddrPort
-	for _, ip := range st.TailscaleIPs {
-		// TODO(will): watch for Tailscale IP changes and update listener
-		if (network == "udp4" && ip.Is4()) || (network == "udp6" && ip.Is6()) {
-			p, _ := strconv.Atoi(port)
-			ap = netip.AddrPortFrom(ip, uint16(p))
-			break
+
+	// We can only return one listener and MagicDNS returns IPv4 addresses unless IPv4 is disabled
+	// Prefer IPv4 if available unless IPv6 was explicitly requested
+	// TODO(will): watch for Tailscale IP changes and update listener
+
+	// First pass: look for IPv4 tsnet address if IPv4 was implicitly ("udp") or explicitly ("udp4") requested
+	if network == "udp" || network == "udp4" {
+		for _, ip := range st.TailscaleIPs {
+			if ip.Is4() {
+				p, _ := strconv.Atoi(port)
+				ap = netip.AddrPortFrom(ip, uint16(p))
+				network = "udp4" // Update network for tsnet
+				break
+			}
 		}
 	}
+
+	// Second pass: look for IPv6 tsnet address if IPv6 was implicitly ("udp") or explicitly ("udp6") requested
+	if !ap.IsValid() && (network == "udp" || network == "udp6") {
+		for _, ip := range st.TailscaleIPs {
+			if ip.Is6() {
+				p, _ := strconv.Atoi(port)
+				ap = netip.AddrPortFrom(ip, uint16(p))
+				network = "udp6" // Update network for tsnet
+				break
+			}
+		}
+	}
+
+	if !ap.IsValid() {
+		return nil, fmt.Errorf("no suitable Tailscale IP address found for UDP listener")
+	}
+
 	return s.Server.ListenPacket(network, ap.String())
 }
 
