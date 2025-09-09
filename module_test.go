@@ -4,7 +4,7 @@
 package tscaddy
 
 import (
-	"errors"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -337,28 +337,37 @@ func Test_Listen(t *testing.T) {
 	must.Do(caddy.Run(new(caddy.Config)))
 	ctx := caddy.ActiveContext()
 
-	node, err := getNode(ctx, "testhost")
+	// Test the listener pooling system via getTCPListener
+	ln, err := getTCPListener(ctx, "tailscale", "testhost", "80", 0, net.ListenConfig{})
 	if err != nil {
-		t.Fatal("failed to get server", err)
+		t.Fatal("failed to get listener", err)
 	}
 
-	ln, err := node.Listen("tcp", ":80")
-	if err != nil {
-		t.Fatal("failed to listen", err)
-	}
+	// Check that node reference exists
 	count, exists := nodes.References("testhost")
-	if !exists && count != 1 {
-		t.Fatal("reference doesn't exist")
+	if !exists || count != 1 {
+		t.Fatalf("expected 1 node reference, got count=%d exists=%v", count, exists)
 	}
-	ln.Close()
 
+	// Check that listener reference exists
+	listenerKey := "tailscale/testhost:tcp:80"
+	lcount, lexists := tailscaleListeners.References(listenerKey)
+	if !lexists || lcount != 1 {
+		t.Fatalf("expected 1 listener reference, got count=%d exists=%v", lcount, lexists)
+	}
+
+	// Close the listener
+	ln.(io.Closer).Close()
+
+	// Check that listener reference is gone
+	lcount, lexists = tailscaleListeners.References(listenerKey)
+	if lexists && lcount != 0 {
+		t.Fatalf("expected 0 listener references after close, got count=%d exists=%v", lcount, lexists)
+	}
+
+	// Check that node reference is also gone (since no listeners remain)
 	count, exists = nodes.References("testhost")
 	if exists && count != 0 {
-		t.Fatal("reference exists when it shouldn't")
-	}
-
-	err = node.Close()
-	if !errors.Is(err, net.ErrClosed) {
-		t.Fatal("unexpected error", err)
+		t.Fatalf("expected 0 node references after close, got count=%d exists=%v", count, exists)
 	}
 }
