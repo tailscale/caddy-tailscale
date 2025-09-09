@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
@@ -61,15 +62,38 @@ func getTCPListener(c context.Context, network string, host string, portRange st
 		return nil, err
 	}
 
-	s, err := getNode(ctx, host)
+	if network == "" {
+		network = "tcp"
+	}
+
+	// Get node reference for this listener (increments node reference count)
+	node, err := getNode(ctx, host)
 	if err != nil {
 		return nil, err
 	}
 
-	if network == "" {
-		network = "tcp"
+	// Follow Caddy's standard listener pooling mechanism
+	lnKey := fmt.Sprintf("tailscale/%s:%s:%s", host, network, port)
+
+	sharedLn, _, err := tailscaleListeners.LoadOrNew(lnKey, func() (caddy.Destructor, error) {
+		ln, err := node.Server.Listen(network, ":"+port)
+		if err != nil {
+			return nil, err
+		}
+
+		return &tailscaleSharedListener{
+			Listener: ln,
+			key:      lnKey,
+		}, nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return s.Listen(network, ":"+port)
+
+	return &tailscaleFakeCloseListener{
+		tailscaleSharedListener: sharedLn.(*tailscaleSharedListener),
+		node:                    &fakeCloseNode{nodeName: host, node: node},
+	}, nil
 }
 
 func getTLSListener(c context.Context, network string, host string, portRange string, portOffset uint, _ net.ListenConfig) (any, error) {
@@ -89,26 +113,43 @@ func getTLSListener(c context.Context, network string, host string, portRange st
 		return nil, err
 	}
 
-	s, err := getNode(ctx, host)
-	if err != nil {
-		return nil, err
-	}
-
 	if network == "" {
 		network = "tcp"
 	}
-	ln, err := s.Listen(network, ":"+port)
+
+	// Get node reference for this listener (increments node reference count)
+	node, err := getNode(ctx, host)
 	if err != nil {
 		return nil, err
 	}
 
-	localClient, _ := s.LocalClient()
+	// Follow Caddy's standard listener pooling mechanism
+	lnKey := fmt.Sprintf("tailscale+tls/%s:%s:%s", host, network, port)
 
-	ln = tls.NewListener(ln, &tls.Config{
-		GetCertificate: localClient.GetCertificate,
+	sharedLn, _, err := tailscaleListeners.LoadOrNew(lnKey, func() (caddy.Destructor, error) {
+		ln, err := node.Server.Listen(network, ":"+port)
+		if err != nil {
+			return nil, err
+		}
+
+		localClient, _ := node.LocalClient()
+		tlsLn := tls.NewListener(ln, &tls.Config{
+			GetCertificate: localClient.GetCertificate,
+		})
+
+		return &tailscaleSharedListener{
+			Listener: tlsLn,
+			key:      lnKey,
+		}, nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
-	return ln, nil
+	return &tailscaleFakeCloseListener{
+		tailscaleSharedListener: sharedLn.(*tailscaleSharedListener),
+		node:                    &fakeCloseNode{nodeName: host, node: node},
+	}, nil
 }
 
 func getUDPListener(c context.Context, network string, host string, portRange string, portOffset uint, _ net.ListenConfig) (any, error) {
@@ -128,55 +169,76 @@ func getUDPListener(c context.Context, network string, host string, portRange st
 		return nil, err
 	}
 
-	s, err := getNode(ctx, host)
-	if err != nil {
-		return nil, err
-	}
-
-	st, err := s.Up(context.Background())
-	if err != nil {
-		return nil, err
-	}
-
 	if network == "" {
 		network = "udp"
 	}
 
-	var ap netip.AddrPort
+	// Get node reference for this listener (increments node reference count)
+	node, err := getNode(ctx, host)
+	if err != nil {
+		return nil, err
+	}
 
-	// We can only return one listener and MagicDNS returns IPv4 addresses unless IPv4 is disabled
-	// Prefer IPv4 if available unless IPv6 was explicitly requested
-	// TODO(will): watch for Tailscale IP changes and update listener
+	// Follow Caddy's standard listener pooling mechanism
+	lnKey := fmt.Sprintf("tailscale/udp/%s:%s:%s", host, network, port)
 
-	// First pass: look for IPv4 tsnet address if IPv4 was implicitly ("udp") or explicitly ("udp4") requested
-	if network == "udp" || network == "udp4" {
-		for _, ip := range st.TailscaleIPs {
-			if ip.Is4() {
-				p, _ := strconv.Atoi(port)
-				ap = netip.AddrPortFrom(ip, uint16(p))
-				network = "udp4" // Update network for tsnet
-				break
+	sharedPc, _, err := tailscaleListeners.LoadOrNew(lnKey, func() (caddy.Destructor, error) {
+		st, err := node.Up(context.Background())
+		if err != nil {
+			return nil, err
+		}
+
+		// We can only return one listener and MagicDNS returns IPv4 addresses unless IPv4 is disabled
+		// Prefer IPv4 if available unless IPv6 was explicitly requested
+		// TODO(will): watch for Tailscale IP changes and update listener
+		var ap netip.AddrPort
+
+		// First pass: look for IPv4 tsnet address if IPv4 was implicitly ("udp") or explicitly ("udp4") requested
+		if network == "udp" || network == "udp4" {
+			for _, ip := range st.TailscaleIPs {
+				if ip.Is4() {
+					p, _ := strconv.Atoi(port)
+					ap = netip.AddrPortFrom(ip, uint16(p))
+					network = "udp4" // Update network for tsnet
+					break
+				}
 			}
 		}
-	}
 
-	// Second pass: look for IPv6 tsnet address if IPv6 was implicitly ("udp") or explicitly ("udp6") requested
-	if !ap.IsValid() && (network == "udp" || network == "udp6") {
-		for _, ip := range st.TailscaleIPs {
-			if ip.Is6() {
-				p, _ := strconv.Atoi(port)
-				ap = netip.AddrPortFrom(ip, uint16(p))
-				network = "udp6" // Update network for tsnet
-				break
+		// Second pass: look for IPv6 tsnet address if IPv6 was implicitly ("udp") or explicitly ("udp6") requested
+		if !ap.IsValid() && (network == "udp" || network == "udp6") {
+			for _, ip := range st.TailscaleIPs {
+				if ip.Is6() {
+					p, _ := strconv.Atoi(port)
+					ap = netip.AddrPortFrom(ip, uint16(p))
+					network = "udp6" // Update network for tsnet
+					break
+				}
 			}
 		}
+
+		if !ap.IsValid() {
+			return nil, fmt.Errorf("no suitable Tailscale IP address found for UDP listener")
+		}
+
+		pc, err := node.Server.ListenPacket(network, ap.String())
+		if err != nil {
+			return nil, err
+		}
+
+		return &tailscaleSharedPacketConn{
+			PacketConn: pc,
+			key:        lnKey,
+		}, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	if !ap.IsValid() {
-		return nil, fmt.Errorf("no suitable Tailscale IP address found for UDP listener")
-	}
-
-	return s.Server.ListenPacket(network, ap.String())
+	return &tailscaleFakeClosePacketConn{
+		tailscaleSharedPacketConn: sharedPc.(*tailscaleSharedPacketConn),
+		node:                      &fakeCloseNode{nodeName: host, node: node},
+	}, nil
 }
 
 // nodes are the Tailscale nodes that have been configured and started.
@@ -185,6 +247,10 @@ func getUDPListener(c context.Context, network string, host string, portRange st
 //
 // Callers should use getNode() to get a node by name, rather than accessing this pool directly.
 var nodes = caddy.NewUsagePool()
+
+// tailscaleListeners tracks individual tailscale listeners to enable proper cleanup during config reloads.
+// This ensures listeners are properly closed when removed from configuration.
+var tailscaleListeners = caddy.NewUsagePool()
 
 // getNode returns a tailscale node for Caddy apps to interface with.
 //
@@ -345,39 +411,103 @@ func (t tailscaleNode) Destruct() error {
 	return t.Close()
 }
 
-func (t *tailscaleNode) Listen(network string, addr string) (net.Listener, error) {
-	ln, err := t.Server.Listen(network, addr)
-	if err != nil {
-		return nil, err
-	}
-	serverListener := &tsnetServerListener{
-		name:     t.Hostname,
-		Listener: ln,
-	}
-	return serverListener, nil
+// fakeCloseNode is similar to fakeCloseListener but for node references.
+// It allows listeners to hold references to nodes without affecting the
+// actual node reference count until the listener is truly destroyed.
+type fakeCloseNode struct {
+	nodeName string
+	node     *tailscaleNode
 }
 
-type tsnetServerListener struct {
-	name string
+func (fcn *fakeCloseNode) Close() error {
+	_, _ = nodes.Delete(fcn.nodeName)
+	return nil
+}
+
+// tailscaleSharedListener is similar to Caddy's sharedListener but for tailscale listeners
+type tailscaleSharedListener struct {
 	net.Listener
+	key string
 }
 
-func (t *tsnetServerListener) Unwrap() net.Listener {
-	if t == nil {
-		return nil
-	}
-	return t.Listener
+func (tsl *tailscaleSharedListener) Destruct() error {
+	return tsl.Listener.Close()
 }
 
-func (t *tsnetServerListener) Close() error {
-	if err := t.Listener.Close(); err != nil {
-		return err
+// tailscaleFakeCloseListener is similar to Caddy's fakeCloseListener
+type tailscaleFakeCloseListener struct {
+	closed int32 // accessed atomically
+	*tailscaleSharedListener
+	node *fakeCloseNode
+}
+
+func (tfcl *tailscaleFakeCloseListener) Accept() (net.Conn, error) {
+	// if the listener is already "closed", return error
+	if atomic.LoadInt32(&tfcl.closed) == 1 {
+		return nil, &net.OpError{
+			Op:   "accept",
+			Net:  tfcl.Addr().Network(),
+			Addr: tfcl.Addr(),
+			Err:  fmt.Errorf("listener 'closed'"),
+		}
 	}
 
-	// Decrement usage count of this node.
-	// If usage reaches zero, then the node is actually shutdown.
-	_, err := nodes.Delete(t.name)
-	return err
+	return tfcl.tailscaleSharedListener.Accept()
+}
+
+func (tfcl *tailscaleFakeCloseListener) Close() error {
+	if atomic.CompareAndSwapInt32(&tfcl.closed, 0, 1) {
+		_, _ = tailscaleListeners.Delete(tfcl.key)
+		tfcl.node.Close()
+	}
+	return nil
+}
+
+func (tfcl *tailscaleFakeCloseListener) Unwrap() net.Listener {
+	return tfcl.tailscaleSharedListener.Listener
+}
+
+// tailscaleSharedPacketConn is similar to tailscaleSharedListener but for packet connections
+type tailscaleSharedPacketConn struct {
+	net.PacketConn
+	key string
+}
+
+func (tspc *tailscaleSharedPacketConn) Destruct() error {
+	return tspc.PacketConn.Close()
+}
+
+// tailscaleFakeClosePacketConn is similar to tailscaleFakeCloseListener but for packet connections
+type tailscaleFakeClosePacketConn struct {
+	closed int32 // accessed atomically
+	*tailscaleSharedPacketConn
+	node *fakeCloseNode
+}
+
+func (tfcpc *tailscaleFakeClosePacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	// if the connection is already "closed", return error
+	if atomic.LoadInt32(&tfcpc.closed) == 1 {
+		return 0, nil, &net.OpError{
+			Op:   "readfrom",
+			Net:  tfcpc.LocalAddr().Network(),
+			Addr: tfcpc.LocalAddr(),
+			Err:  fmt.Errorf("connection 'closed'"),
+		}
+	}
+
+	return tfcpc.tailscaleSharedPacketConn.ReadFrom(p)
+}
+
+func (tfcpc *tailscaleFakeClosePacketConn) Close() error {
+	if atomic.CompareAndSwapInt32(&tfcpc.closed, 0, 1) {
+		_, _ = tailscaleListeners.Delete(tfcpc.key)
+		tfcpc.node.Close()
+	}
+	return nil
+}
+
+func (tfcpc *tailscaleFakeClosePacketConn) Unwrap() net.PacketConn {
+	return tfcpc.tailscaleSharedPacketConn.PacketConn
 }
 
 // tsnetMuxTransport is an [http.RoundTripper] that sends requests to the LocalAPI
