@@ -8,6 +8,7 @@
 {
   tailscale {
     ephemeral
+    # Using tags to allow OAuth tokens usage
     tags tag:test
   }
 }

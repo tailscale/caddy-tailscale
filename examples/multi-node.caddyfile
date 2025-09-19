@@ -1,0 +1,33 @@
+# Multi-node Tailscale configuration example
+# This creates two separate Tailscale nodes under one Caddy instance
+# Each node responds with a simple message identifying itself
+
+{
+    tailscale {
+        # First Tailscale node
+        test-server-1 {
+            ephemeral
+            hostname test-server-1
+            tags tag:test
+        }
+
+        # Second Tailscale node
+        test-server-2 {
+            ephemeral
+            hostname test-server-2
+            tags tag:test
+        }
+    }
+}
+
+# Site running on test-server-1 node
+:80 {
+    bind tailscale/test-server-1
+    respond "Hello from test-server-1! 🚀"
+}
+
+# Site running on test-server-2 node
+:80 {
+    bind tailscale/test-server-2
+    respond "Hello from test-server-2! 🎯"
+}
