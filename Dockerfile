@@ -5,7 +5,7 @@ WORKDIR /work
 
 # Install git so that go build populates the VCS details in build info, which
 # is then reported to Tailscale in the node version string.
-RUN apk --no-cache add git=2.47.2-r0
+RUN apk --no-cache add git
 
 COPY go.mod go.sum ./
 RUN go mod download

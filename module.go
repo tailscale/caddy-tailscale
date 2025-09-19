@@ -10,7 +10,9 @@ package tscaddy
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/netip"
@@ -25,6 +27,7 @@ import (
 	"github.com/caddyserver/certmagic"
 	"github.com/tailscale/tscert"
 	"go.uber.org/zap"
+	"golang.org/x/oauth2/clientcredentials"
 	"tailscale.com/client/tailscale"
 	"tailscale.com/hostinfo"
 	"tailscale.com/tsnet"
@@ -217,25 +220,160 @@ func getNode(ctx caddy.Context, name string) (*tailscaleNode, error) {
 var repl = caddy.NewReplacer()
 
 func getAuthKey(name string, app *App) (string, error) {
+	var authKey string
+	var err error
+
 	if node, ok := app.Nodes[name]; ok {
 		if node.AuthKey != "" {
-			return repl.ReplaceOrErr(node.AuthKey, true, true)
+			authKey, err = repl.ReplaceOrErr(node.AuthKey, true, true)
+			if err != nil {
+				return "", err
+			}
 		}
 	}
 
-	if app.DefaultAuthKey != "" {
-		return repl.ReplaceOrErr(app.DefaultAuthKey, true, true)
+	if authKey == "" && app.DefaultAuthKey != "" {
+		authKey, err = repl.ReplaceOrErr(app.DefaultAuthKey, true, true)
+		if err != nil {
+			return "", err
+		}
 	}
 
-	// Set authkey to "TS_AUTHKEY_<HOST>".
-	// If empty, fall back to "TS_AUTHKEY".
-	authKey := os.Getenv("TS_AUTHKEY_" + strings.ToUpper(name))
-	if authKey != "" {
-		app.logger.Warn("Relying on TS_AUTHKEY_{HOST} env var is deprecated. Set caddy config instead.", zap.Any("host", name))
+	if authKey == "" {
+		// Set authkey to "TS_AUTHKEY_<HOST>".
+		// If empty, fall back to "TS_AUTHKEY".
+		authKey = os.Getenv("TS_AUTHKEY_" + strings.ToUpper(name))
+		if authKey != "" {
+			app.logger.Warn("Relying on TS_AUTHKEY_{HOST} env var is deprecated. Set caddy config instead.", zap.Any("host", name))
+		} else {
+			authKey = os.Getenv("TS_AUTHKEY")
+		}
+	}
+
+	if authKey == "" {
+		return "", nil
+	}
+
+	return resolveAuthKey(authKey, name, app)
+}
+
+func getTags(name string, app *App) []string {
+	var tags []string
+
+	// Start with app-level tags
+	tags = append(tags, app.Tags...)
+
+	// Add node-specific tags
+	if node, ok := app.Nodes[name]; ok {
+		tags = append(tags, node.Tags...)
+	}
+
+	// Remove duplicates
+	seen := make(map[string]bool)
+	result := []string{}
+	for _, tag := range tags {
+		if !seen[tag] {
+			seen[tag] = true
+			result = append(result, tag)
+		}
+	}
+
+	return result
+}
+
+func resolveAuthKey(authKey, name string, app *App) (string, error) {
+	// Check if this is an OAuth client token
+	if !strings.HasPrefix(authKey, "tskey-client-") {
 		return authKey, nil
 	}
 
-	return os.Getenv("TS_AUTHKEY"), nil
+	app.logger.Debug("OAuth client token detected, performing token exchange", zap.String("node", name))
+
+	// Get control URL
+	controlURL, err := getControlURL(name, app)
+	if err != nil {
+		return "", fmt.Errorf("failed to get control URL: %w", err)
+	}
+
+	if controlURL == "" {
+		controlURL = "https://api.tailscale.com"
+	}
+
+	// Prepare OAuth2 config
+	config := &clientcredentials.Config{
+		ClientID:     authKey,
+		TokenURL:     controlURL + "/api/v2/oauth/token",
+		Scopes:       []string{"auth_keys"},
+	}
+
+	// Get token
+	ctx := context.Background()
+	token, err := config.Token(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to exchange OAuth token: %w", err)
+	}
+
+	// Prepare request for auth key generation
+	ephemeral := getEphemeral(name, app)
+	tags := getTags(name, app)
+
+	data := map[string]interface{}{
+		"capabilities": map[string]interface{}{
+			"devices": map[string]interface{}{
+				"create": map[string]interface{}{
+					"reusable":      false,
+					"ephemeral":     ephemeral,
+					"preauthorized": true,
+					"tags":          tags,
+				},
+			},
+		},
+		"expirySeconds": 0,
+		"description":   "Caddy Tailscale OAuth key",
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal auth key request: %w", err)
+	}
+
+	// Make request to generate auth key
+	req, err := http.NewRequestWithContext(ctx, "POST", controlURL+"/api/v2/tailnet/-/keys", strings.NewReader(string(jsonData)))
+	if err != nil {
+		return "", fmt.Errorf("failed to create auth key request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate auth key: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		app.logger.Error("Auth key generation failed",
+			zap.Int("status", resp.StatusCode),
+			zap.String("response", string(body)),
+			zap.String("request", string(jsonData)))
+		return "", fmt.Errorf("auth key generation failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("failed to decode auth key response: %w", err)
+	}
+
+	key, ok := result["key"].(string)
+	if !ok {
+		return "", fmt.Errorf("invalid auth key response format")
+	}
+
+	app.logger.Info("Successfully generated auth key from OAuth token", zap.String("node", name))
+	return key, nil
 }
 
 func getControlURL(name string, app *App) (string, error) {

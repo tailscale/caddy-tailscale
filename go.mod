@@ -1,8 +1,8 @@
 module github.com/tailscale/caddy-tailscale
 
-go 1.23.1
+go 1.24.0
 
-toolchain go1.23.5
+toolchain go1.24.3
 
 require (
 	github.com/caddyserver/caddy/v2 v2.9.1
@@ -196,6 +196,7 @@ require (
 	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8 // indirect
 	golang.org/x/mod v0.22.0 // indirect
 	golang.org/x/net v0.34.0 // indirect
+	golang.org/x/oauth2 v0.31.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.29.1-0.20250107080300-1c14dcadc3ab // indirect
 	golang.org/x/term v0.28.0 // indirect
