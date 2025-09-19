@@ -8,6 +8,7 @@ package tscaddy
 // as well as some shared logic for registered Tailscale nodes.
 
 import (
+	"cmp"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -25,6 +26,7 @@ import (
 	"github.com/caddyserver/certmagic"
 	"github.com/tailscale/tscert"
 	"go.uber.org/zap"
+	"golang.org/x/oauth2/clientcredentials"
 	"tailscale.com/client/tailscale"
 	"tailscale.com/hostinfo"
 	"tailscale.com/tsnet"
@@ -217,25 +219,121 @@ func getNode(ctx caddy.Context, name string) (*tailscaleNode, error) {
 var repl = caddy.NewReplacer()
 
 func getAuthKey(name string, app *App) (string, error) {
+	var authKey string
+	var err error
+
 	if node, ok := app.Nodes[name]; ok {
 		if node.AuthKey != "" {
-			return repl.ReplaceOrErr(node.AuthKey, true, true)
+			authKey, err = repl.ReplaceOrErr(node.AuthKey, true, true)
+			if err != nil {
+				return "", err
+			}
 		}
 	}
 
-	if app.DefaultAuthKey != "" {
-		return repl.ReplaceOrErr(app.DefaultAuthKey, true, true)
+	if authKey == "" && app.DefaultAuthKey != "" {
+		authKey, err = repl.ReplaceOrErr(app.DefaultAuthKey, true, true)
+		if err != nil {
+			return "", err
+		}
 	}
 
-	// Set authkey to "TS_AUTHKEY_<HOST>".
-	// If empty, fall back to "TS_AUTHKEY".
-	authKey := os.Getenv("TS_AUTHKEY_" + strings.ToUpper(name))
-	if authKey != "" {
-		app.logger.Warn("Relying on TS_AUTHKEY_{HOST} env var is deprecated. Set caddy config instead.", zap.Any("host", name))
+	if authKey == "" {
+		// Set authkey to "TS_AUTHKEY_<HOST>".
+		// If empty, fall back to "TS_AUTHKEY".
+		authKey = os.Getenv("TS_AUTHKEY_" + strings.ToUpper(name))
+		if authKey != "" {
+			app.logger.Warn("Relying on TS_AUTHKEY_{HOST} env var is deprecated. Set caddy config instead.", zap.Any("host", name))
+		} else {
+			authKey = os.Getenv("TS_AUTHKEY")
+		}
+	}
+
+	if authKey == "" {
+		return "", nil
+	}
+
+	return resolveAuthKey(authKey, name, app)
+}
+
+func getTags(name string, app *App) []string {
+	var tags []string
+
+	// Start with app-level tags
+	tags = append(tags, app.Tags...)
+
+	// Add node-specific tags
+	if node, ok := app.Nodes[name]; ok {
+		tags = append(tags, node.Tags...)
+	}
+
+	// Remove duplicates
+	seen := make(map[string]bool)
+	result := []string{}
+	for _, tag := range tags {
+		if !seen[tag] {
+			seen[tag] = true
+			result = append(result, tag)
+		}
+	}
+
+	return result
+}
+
+func resolveAuthKey(authKey, name string, app *App) (string, error) {
+	if !strings.HasPrefix(authKey, "tskey-client-") {
 		return authKey, nil
 	}
+	clientSecret := authKey
 
-	return os.Getenv("TS_AUTHKEY"), nil
+	app.logger.Debug("OAuth client token detected, performing token exchange", zap.String("node", name))
+
+	clientID := os.Getenv("TS_API_CLIENT_ID")
+	if clientID == "" || clientSecret == "" {
+		app.logger.Error("TS_API_CLIENT_ID and TS_AUTHKEY must be set to use OAuth client tokens")
+	}
+
+	tags := getTags(name, app)
+	if len(tags) == 0 {
+		app.logger.Error("at least one tag must be specified")
+	}
+
+	baseURL := cmp.Or(os.Getenv("TS_BASE_URL"), "https://api.tailscale.com")
+
+	credentials := clientcredentials.Config{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		TokenURL:     baseURL + "/api/v2/oauth/token",
+	}
+
+	ctx := context.Background()
+	tailscale.I_Acknowledge_This_API_Is_Unstable = true
+	tsClient := tailscale.NewClient("-", nil)
+	tsClient.UserAgent = "caddy-tailscale"
+	tsClient.HTTPClient = credentials.Client(ctx)
+	tsClient.BaseURL = baseURL
+
+	ephemeral := getEphemeral(name, app)
+
+	caps := tailscale.KeyCapabilities{
+		Devices: tailscale.KeyDeviceCapabilities{
+			Create: tailscale.KeyDeviceCreateCapabilities{
+				Reusable:      false,
+				Ephemeral:     ephemeral,
+				Preauthorized: true,
+				Tags:          tags,
+			},
+		},
+	}
+
+	authkey, _, err := tsClient.CreateKey(ctx, caps)
+	if err != nil {
+		return "", fmt.Errorf("failed to create auth key: %w", err)
+	}
+
+	app.logger.Info("Successfully generated auth key from OAuth token", zap.String("node", name))
+	return authkey, nil
+
 }
 
 func getControlURL(name string, app *App) (string, error) {

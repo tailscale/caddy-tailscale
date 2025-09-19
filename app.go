@@ -41,6 +41,9 @@ type App struct {
 	// WebUI specifies whether Tailscale nodes should run the Web UI for remote management.
 	WebUI bool `json:"webui,omitempty" caddy:"namespace=tailscale.webui"`
 
+	// Tags specifies the default tags to apply to Tailscale nodes.
+	Tags []string `json:"tags,omitempty" caddy:"namespace=tailscale.tags"`
+
 	// Nodes is a map of per-node configuration which overrides global options.
 	Nodes map[string]Node `json:"nodes,omitempty" caddy:"namespace=tailscale"`
 
@@ -71,6 +74,9 @@ type Node struct {
 	// StateDir specifies the state directory for the node.
 	StateDir string `json:"state_dir,omitempty" caddy:"namespace=tailscale.state_dir"`
 
+	// Tags specifies the tags to apply to the node.
+	Tags []string `json:"tags,omitempty" caddy:"namespace=tailscale.tags"`
+
 	name string
 }
 
@@ -91,6 +97,22 @@ func (t *App) Start() error {
 }
 
 func (t *App) Stop() error {
+	// On shutdown, destruct all nodes to ensure ephemeral nodes are removed.
+	var errList []error
+	nodes.Range(func(key, value any) bool {
+		if n, ok := value.(interface{ Destruct() error }); ok && n != nil {
+			if err := n.Destruct(); err != nil {
+				if t.logger != nil {
+					t.logger.Warn("Failed to destruct node", zap.Any("node", key), zap.Error(err))
+				}
+				errList = append(errList, err)
+			}
+		}
+		return true
+	})
+	if len(errList) > 0 {
+		return errList[0] // Return first error (could be improved)
+	}
 	return nil
 }
 
@@ -142,6 +164,8 @@ func parseAppConfig(d *caddyfile.Dispenser, _ any) (any, error) {
 			} else {
 				app.WebUI = true
 			}
+		case "tags":
+			app.Tags = d.RemainingArgs()
 		default:
 			node, err := parseNodeConfig(d)
 			if app.Nodes == nil {
@@ -223,6 +247,8 @@ func parseNodeConfig(d *caddyfile.Dispenser) (Node, error) {
 			} else {
 				node.WebUI = opt.NewBool(true)
 			}
+		case "tags":
+			node.Tags = segment.RemainingArgs()
 		default:
 			return node, segment.Errf("unrecognized subdirective: %s", segment.Val())
 		}
