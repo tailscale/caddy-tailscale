@@ -13,16 +13,15 @@
 
 {
     tailscale {
+        ephemeral true
+        tags tag:test
+
         test-server-1 {
-            ephemeral true
             hostname test-server-1
-            tags tag:test
         }
 
         test-server-2 {
-            ephemeral true
             hostname test-server-2
-            tags tag:test
         }
     }
 }
