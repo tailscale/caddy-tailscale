@@ -97,6 +97,22 @@ func (t *App) Start() error {
 }
 
 func (t *App) Stop() error {
+	// On shutdown, destruct all nodes to ensure ephemeral nodes are removed.
+	var errList []error
+	nodes.Range(func(key, value any) bool {
+		if n, ok := value.(interface{ Destruct() error }); ok && n != nil {
+			if err := n.Destruct(); err != nil {
+				if t.logger != nil {
+					t.logger.Warn("Failed to destruct node", zap.Any("node", key), zap.Error(err))
+				}
+				errList = append(errList, err)
+			}
+		}
+		return true
+	})
+	if len(errList) > 0 {
+		return errList[0] // Return first error (could be improved)
+	}
 	return nil
 }
 
