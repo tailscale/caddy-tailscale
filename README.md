@@ -45,6 +45,7 @@ go build ./cmd/caddy
 
 ### Running examples
 
+
 Multiple example configurations are provided in the [examples directory].
 These examples expect an [auth key] to be set in the `TS_AUTHKEY` environment variable.
 All nodes registered while running these examples will be ephemeral and removed after disconnect.
@@ -54,6 +55,29 @@ Run them with:
 
 ```sh
 TS_AUTHKEY=<tskey-auth-XXXXX> ./caddy run -c examples/<file>
+```
+
+#### Using OAuth for Tailscale Auth
+
+You can use OAuth credentials to register Tailscale nodes instead of a standard auth key.
+Set the following environment variables before running Caddy:
+
+```sh
+export TS_AUTHKEY=$TS_CLIENT_SECRET
+export TS_API_CLIENT_ID=$TS_CLIENT_ID
+```
+
+This will use your OAuth client credentials to generate a Tailscale auth key at runtime.
+
+See the [multi-node example](./examples/multi-node.caddyfile) for a sample configuration and Docker run command:
+
+```sh
+docker run -it \
+  -e TS_API_CLIENT_ID=$TS_CLIENT_ID \
+  -e TS_AUTHKEY=$TS_CLIENT_SECRET \
+  -e TS_DOMAIN=$TS_DOMAIN \
+  -v ./examples/multi-node.caddyfile:/etc/caddy/Caddyfile \
+  caddy-tailscale
 ```
 
 [examples directory]: ./examples/
