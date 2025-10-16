@@ -436,14 +436,14 @@ func (tsl *tailscaleSharedListener) Destruct() error {
 
 // tailscaleFakeCloseListener is similar to Caddy's fakeCloseListener
 type tailscaleFakeCloseListener struct {
-	closed int32 // accessed atomically
+	closed atomic.Bool
 	*tailscaleSharedListener
 	node *fakeCloseNode
 }
 
 func (tfcl *tailscaleFakeCloseListener) Accept() (net.Conn, error) {
-	// if the listener is already "closed", return error
-	if atomic.LoadInt32(&tfcl.closed) == 1 {
+	// if the listener is already closed, return error
+	if tfcl.closed.Load() {
 		return nil, &net.OpError{
 			Op:   "accept",
 			Net:  tfcl.Addr().Network(),
@@ -456,7 +456,7 @@ func (tfcl *tailscaleFakeCloseListener) Accept() (net.Conn, error) {
 }
 
 func (tfcl *tailscaleFakeCloseListener) Close() error {
-	if atomic.CompareAndSwapInt32(&tfcl.closed, 0, 1) {
+	if tfcl.closed.CompareAndSwap(false, true) {
 		_, _ = tailscaleListeners.Delete(tfcl.key)
 		tfcl.node.Close()
 	}
@@ -479,14 +479,14 @@ func (tspc *tailscaleSharedPacketConn) Destruct() error {
 
 // tailscaleFakeClosePacketConn is similar to tailscaleFakeCloseListener but for packet connections
 type tailscaleFakeClosePacketConn struct {
-	closed int32 // accessed atomically
+	closed atomic.Bool
 	*tailscaleSharedPacketConn
 	node *fakeCloseNode
 }
 
 func (tfcpc *tailscaleFakeClosePacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	// if the connection is already "closed", return error
-	if atomic.LoadInt32(&tfcpc.closed) == 1 {
+	// if the connection is already closed, return error
+	if tfcpc.closed.Load() {
 		return 0, nil, &net.OpError{
 			Op:   "readfrom",
 			Net:  tfcpc.LocalAddr().Network(),
@@ -499,7 +499,7 @@ func (tfcpc *tailscaleFakeClosePacketConn) ReadFrom(p []byte) (n int, addr net.A
 }
 
 func (tfcpc *tailscaleFakeClosePacketConn) Close() error {
-	if atomic.CompareAndSwapInt32(&tfcpc.closed, 0, 1) {
+	if tfcpc.closed.CompareAndSwap(false, true) {
 		_, _ = tailscaleListeners.Delete(tfcpc.key)
 		tfcpc.node.Close()
 	}
