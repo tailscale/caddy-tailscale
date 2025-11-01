@@ -35,8 +35,8 @@ func init() {
 	caddy.RegisterNetwork("tailscale", getTCPListener)
 	caddy.RegisterNetwork("tailscale+tls", getTLSListener)
 	caddy.RegisterNetwork("tailscale/udp", getUDPListener)
-	caddyhttp.RegisterNetworkHTTP3("tailscale/udp", "tailscale/udp")
-	caddyhttp.RegisterNetworkHTTP3("tailscale", "tailscale/udp")
+	caddy.RegisterNetworkHTTP3("tailscale/udp", "tailscale/udp")
+	caddy.RegisterNetworkHTTP3("tailscale", "tailscale/udp")
 
 	// Caddy uses tscert to get certificates for Tailscale hostnames.
 	// Update the tscert transport to send requests to the correct tsnet server,
