@@ -1,5 +1,5 @@
 ARG GO_VERSION=1.25
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine as build
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS build
 
 WORKDIR /work
 
@@ -31,8 +31,8 @@ COPY --from=build /work/caddy /usr/bin/caddy
 COPY examples/simple.caddyfile /etc/caddy/Caddyfile
 
 # See https://caddyserver.com/docs/conventions#file-locations for details
-ENV XDG_CONFIG_HOME /config
-ENV XDG_DATA_HOME /data
+ENV XDG_CONFIG_HOME=/config
+ENV XDG_DATA_HOME=/data
 
 EXPOSE 80
 EXPOSE 443
