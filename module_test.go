@@ -333,6 +333,98 @@ func Test_GetWebUI(t *testing.T) {
 	}
 }
 
+func Test_GetTags(t *testing.T) {
+	tests := map[string]struct {
+		appTags  []string
+		nodeTags []string
+		want     []string
+	}{
+		"no tags": {
+			appTags:  nil,
+			nodeTags: nil,
+			want:     nil,
+		},
+		"app-level tags only": {
+			appTags:  []string{"tag:test1", "tag:test2"},
+			nodeTags: nil,
+			want:     []string{"tag:test1", "tag:test2"},
+		},
+		"node-level tags override app tags": {
+			appTags:  []string{"tag:app1", "tag:app2"},
+			nodeTags: []string{"tag:node1", "tag:node2"},
+			want:     []string{"tag:node1", "tag:node2"},
+		},
+		"empty node tags override app tags": {
+			appTags:  []string{"tag:app1", "tag:app2"},
+			nodeTags: []string{},
+			want:     []string{},
+		},
+		"single tag": {
+			appTags:  []string{"tag:production"},
+			nodeTags: nil,
+			want:     []string{"tag:production"},
+		},
+		"multiple node tags": {
+			appTags:  nil,
+			nodeTags: []string{"tag:web", "tag:frontend", "tag:production"},
+			want:     []string{"tag:web", "tag:frontend", "tag:production"},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			app := &App{
+				Tags:  tt.appTags,
+				Nodes: make(map[string]Node),
+			}
+			if tt.nodeTags != nil {
+				app.Nodes["testnode"] = Node{
+					Tags: tt.nodeTags,
+				}
+			}
+			if err := app.Provision(caddy.Context{}); err != nil {
+				t.Fatal(err)
+			}
+
+			got := getTags("testnode", app)
+			if len(got) != len(tt.want) {
+				t.Errorf("getTags() = %v, want %v", got, tt.want)
+				return
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("getTags() = %v, want %v", got, tt.want)
+					return
+				}
+			}
+		})
+	}
+
+	// Test node without config gets app-level tags
+	t.Run("node without config uses app tags", func(t *testing.T) {
+		app := &App{
+			Tags:  []string{"tag:default1", "tag:default2"},
+			Nodes: make(map[string]Node),
+		}
+		if err := app.Provision(caddy.Context{}); err != nil {
+			t.Fatal(err)
+		}
+
+		got := getTags("unconfigured-node", app)
+		want := []string{"tag:default1", "tag:default2"}
+		if len(got) != len(want) {
+			t.Errorf("getTags() = %v, want %v", got, want)
+			return
+		}
+		for i := range got {
+			if got[i] != want[i] {
+				t.Errorf("getTags() = %v, want %v", got, want)
+				return
+			}
+		}
+	})
+}
+
 func Test_Listen(t *testing.T) {
 	must.Do(caddy.Run(new(caddy.Config)))
 	ctx := caddy.ActiveContext()

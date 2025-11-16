@@ -41,6 +41,9 @@ type App struct {
 	// WebUI specifies whether Tailscale nodes should run the Web UI for remote management.
 	WebUI bool `json:"webui,omitempty" caddy:"namespace=tailscale.webui"`
 
+	// Tags to apply to all nodes when registered.
+	Tags []string `json:"tags,omitempty" caddy:"namespace=tailscale.tags"`
+
 	// Nodes is a map of per-node configuration which overrides global options.
 	Nodes map[string]Node `json:"nodes,omitempty" caddy:"namespace=tailscale"`
 
@@ -62,6 +65,9 @@ type Node struct {
 
 	// WebUI specifies whether the node should run the Web UI for remote management.
 	WebUI opt.Bool `json:"webui,omitempty" caddy:"namespace=tailscale.webui"`
+
+	// Tags to apply to the node when registered. Overrides global tags.
+	Tags []string `json:"tags,omitempty" caddy:"namespace=tailscale.tags"`
 
 	// Hostname is the hostname to use when registering the node.
 	Hostname string `json:"hostname,omitempty" caddy:"namespace=tailscale.hostname"`
@@ -142,6 +148,8 @@ func parseAppConfig(d *caddyfile.Dispenser, _ any) (any, error) {
 			} else {
 				app.WebUI = true
 			}
+		case "tags":
+			app.Tags = d.RemainingArgs()
 		default:
 			node, err := parseNodeConfig(d)
 			if app.Nodes == nil {
@@ -223,6 +231,8 @@ func parseNodeConfig(d *caddyfile.Dispenser) (Node, error) {
 			} else {
 				node.WebUI = opt.NewBool(true)
 			}
+		case "tags":
+			node.Tags = segment.RemainingArgs()
 		default:
 			return node, segment.Errf("unrecognized subdirective: %s", segment.Val())
 		}
