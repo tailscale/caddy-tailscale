@@ -47,6 +47,8 @@ go build ./cmd/caddy
 
 Multiple example configurations are provided in the [examples directory].
 These examples expect an [auth key] to be set in the `TS_AUTHKEY` environment variable.
+The [auth key] can optionally be an [oauth client secret] which will generate an [auth key] on demand.
+In order for an [oauth client secret] to generate an [auth key] the tag that was registered with the [oauth client secret] must be provided in the caddy config. The ephemeral config option will not have an effect for oauth generated tokens. The linked documentation for [oauth client secret] indicates query parameters that can be appended to the client secret to control these settings.
 All nodes registered while running these examples will be ephemeral and removed after disconnect.
 See the comments in the individual files for details.
 
@@ -114,6 +116,10 @@ Supported options are:
     # Default: false
     webui true|false
 
+    # If set these tags will be included when registering the node
+    tags tag:test
+
+
     # Any number of named node configs can be specified to override global options.
     <node_name> {
       # Tailscale auth key used to register this node.
@@ -134,6 +140,14 @@ Supported options are:
 
       # If true, run the Tailscale web UI for remotely managing this node.
       webui true|false
+
+      # If set these tags will be included when registering the node
+      # Overrides global configuration tags
+      tags tag:test
+
+      # If set this port will be used for tsnet.
+      # When unset tsnet will pick a random available port
+      port 4145
     }
   }
 }
@@ -164,6 +178,7 @@ For Caddy [JSON config], add the `tailscale` app with fields from [tscaddy.App]:
 [global option]: https://caddyserver.com/docs/caddyfile/options
 [placeholders]: https://caddyserver.com/docs/conventions#placeholders
 [auth key]: https://tailscale.com/kb/1085/auth-keys/
+[oauth client secret]: https://tailscale.com/kb/1215/oauth-clients#register-new-nodes-using-oauth-credentials
 [JSON config]: https://caddyserver.com/docs/json/
 [tscaddy.App]: https://pkg.go.dev/github.com/tailscale/caddy-tailscale#App
 
