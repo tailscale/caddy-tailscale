@@ -73,7 +73,7 @@ func findTsnetListener(ln net.Listener) (_ tsnetListener, ok bool) {
 	}
 
 	innerLn := s.FieldByName("Listener")
-	if innerLn.IsZero() {
+	if !innerLn.IsValid() || innerLn.IsZero() {
 		// no more child/embedded listeners left
 		return nil, false
 	}
