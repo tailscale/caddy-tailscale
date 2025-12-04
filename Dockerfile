@@ -1,11 +1,11 @@
 ARG GO_VERSION=1.25
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine as build
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS build
 
 WORKDIR /work
 
 # Install git so that go build populates the VCS details in build info, which
 # is then reported to Tailscale in the node version string.
-RUN apk --no-cache add git=2.49.1-r0
+RUN apk --no-cache add git=2.52.0-r0
 
 COPY go.mod go.sum ./
 RUN go mod download
@@ -31,8 +31,8 @@ COPY --from=build /work/caddy /usr/bin/caddy
 COPY examples/simple.caddyfile /etc/caddy/Caddyfile
 
 # See https://caddyserver.com/docs/conventions#file-locations for details
-ENV XDG_CONFIG_HOME /config
-ENV XDG_DATA_HOME /data
+ENV XDG_CONFIG_HOME=/config
+ENV XDG_DATA_HOME=/data
 
 EXPOSE 80
 EXPOSE 443
