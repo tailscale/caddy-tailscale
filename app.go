@@ -7,6 +7,9 @@ package tscaddy
 
 import (
 	"strconv"
+	"strings"
+
+	"os"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
@@ -117,7 +120,15 @@ func parseAppConfig(d *caddyfile.Dispenser, _ any) (any, error) {
 			if !d.NextArg() {
 				return nil, d.ArgErr()
 			}
-			app.DefaultAuthKey = d.Val()
+			if file, ok := strings.CutPrefix(d.Val(), "file:"); ok {
+				bs, err := os.ReadFile(file)
+				if err != nil {
+					return nil, d.WrapErr(err)
+				}
+				app.DefaultAuthKey = strings.TrimSpace(string(bs))
+			} else {
+				app.DefaultAuthKey = d.Val()
+			}
 		case "control_url":
 			if !d.NextArg() {
 				return nil, d.ArgErr()
@@ -184,7 +195,15 @@ func parseNodeConfig(d *caddyfile.Dispenser) (Node, error) {
 			if !segment.NextArg() {
 				return node, segment.ArgErr()
 			}
-			node.AuthKey = segment.Val()
+			if file, ok := strings.CutPrefix(segment.Val(), "file:"); ok {
+				bs, err := os.ReadFile(file)
+				if err != nil {
+					return node, segment.WrapErr(err)
+				}
+				node.AuthKey = strings.TrimSpace(string(bs))
+			} else {
+				node.AuthKey = segment.Val()
+			}
 		case "control_url":
 			if !segment.NextArg() {
 				return node, segment.ArgErr()
