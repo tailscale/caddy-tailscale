@@ -38,6 +38,15 @@ func Test_ParseApp(t *testing.T) {
 			authKey: "tskey-default",
 		},
 		{
+			name: "auth_key",
+			d: caddyfile.NewTestDispenser(`
+				tailscsale {
+					auth_key file:./authkey_test
+				}`),
+			want:    `{"auth_key":"tskey-auth-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}`,
+			authKey: "thisismykey",
+		},
+		{
 			name: "ephemeral",
 			d: caddyfile.NewTestDispenser(`
 				tailscsale {
