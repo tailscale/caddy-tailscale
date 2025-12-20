@@ -44,6 +44,9 @@ type App struct {
 	// Tags to apply to all nodes when registered.
 	Tags []string `json:"tags,omitempty" caddy:"namespace=tailscale.tags"`
 
+	// Port specifies the default UDP port for tsnet. When unset (0), tsnet will pick a random available port.
+	Port uint16 `json:"port,omitempty" caddy:"namespace=tailscale.port"`
+
 	// Nodes is a map of per-node configuration which overrides global options.
 	Nodes map[string]Node `json:"nodes,omitempty" caddy:"namespace=tailscale"`
 
@@ -150,6 +153,16 @@ func parseAppConfig(d *caddyfile.Dispenser, _ any) (any, error) {
 			}
 		case "tags":
 			app.Tags = d.RemainingArgs()
+		case "port":
+			if d.NextArg() {
+				v, err := strconv.ParseUint(d.Val(), 10, 16)
+				if err != nil {
+					return nil, d.WrapErr(err)
+				}
+				app.Port = uint16(v)
+			} else {
+				app.Port = 0
+			}
 		default:
 			node, err := parseNodeConfig(d)
 			if app.Nodes == nil {
