@@ -66,6 +66,11 @@ func getTCPListener(c context.Context, network string, host string, portRange st
 		network = "tcp"
 	}
 
+	// If host is empty (bind tailscale/), use default node name from binary name
+	if host == "" {
+		host = getDefaultNodeName()
+	}
+
 	// Get node reference for this listener (increments node reference count)
 	node, err := getNode(ctx, host)
 	if err != nil {
@@ -115,6 +120,11 @@ func getTLSListener(c context.Context, network string, host string, portRange st
 
 	if network == "" {
 		network = "tcp"
+	}
+
+	// If host is empty (bind tailscale/), use default node name from binary name
+	if host == "" {
+		host = getDefaultNodeName()
 	}
 
 	// Get node reference for this listener (increments node reference count)
@@ -171,6 +181,11 @@ func getUDPListener(c context.Context, network string, host string, portRange st
 
 	if network == "" {
 		network = "udp"
+	}
+
+	// If host is empty (bind tailscale/), use default node name from binary name
+	if host == "" {
+		host = getDefaultNodeName()
 	}
 
 	// Get node reference for this listener (increments node reference count)
@@ -251,6 +266,12 @@ var nodes = caddy.NewUsagePool()
 // tailscaleListeners tracks individual tailscale listeners to enable proper cleanup during config reloads.
 // This ensures listeners are properly closed when removed from configuration.
 var tailscaleListeners = caddy.NewUsagePool()
+
+// getDefaultNodeName returns the default node name when none is specified.
+// It uses the binary name (without path) as the default.
+func getDefaultNodeName() string {
+	return filepath.Base(os.Args[0])
+}
 
 // getNode returns a tailscale node for Caddy apps to interface with.
 //
@@ -366,7 +387,7 @@ func getPort(name string, app *App) uint16 {
 		return node.Port
 	}
 
-	return 0
+	return app.Port
 }
 
 func getStateDir(name string, app *App) (string, error) {
