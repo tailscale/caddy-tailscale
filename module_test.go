@@ -1,4 +1,4 @@
-// Copyright (c) Tailscale Inc & AUTHORS
+// Copyright (c) Tailscale Inc & contributors
 // SPDX-License-Identifier: Apache-2.0
 
 package tscaddy
@@ -449,7 +449,7 @@ func Test_Listen(t *testing.T) {
 	}
 
 	// Close the listener
-	ln.(io.Closer).Close()
+	must.Do(ln.(io.Closer).Close())
 
 	// Check that listener reference is gone
 	lcount, lexists = tailscaleListeners.References(listenerKey)

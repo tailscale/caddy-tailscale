@@ -1,4 +1,4 @@
-// Copyright (c) Tailscale Inc & AUTHORS
+// Copyright (c) Tailscale Inc & contributors
 // SPDX-License-Identifier: Apache-2.0
 
 // Package tscaddy provides a set of Caddy modules to integrate Tailscale into Caddy.
@@ -26,7 +26,7 @@ import (
 	"github.com/caddyserver/certmagic"
 	"github.com/tailscale/tscert"
 	"go.uber.org/zap"
-	"tailscale.com/client/tailscale"
+	"tailscale.com/client/local"
 	"tailscale.com/hostinfo"
 	"tailscale.com/tsnet"
 )
@@ -76,7 +76,7 @@ func getTCPListener(c context.Context, network string, host string, portRange st
 	lnKey := fmt.Sprintf("tailscale/%s:%s:%s", host, network, port)
 
 	sharedLn, _, err := tailscaleListeners.LoadOrNew(lnKey, func() (caddy.Destructor, error) {
-		ln, err := node.Server.Listen(network, ":"+port)
+		ln, err := node.Listen(network, ":"+port)
 		if err != nil {
 			return nil, err
 		}
@@ -127,7 +127,7 @@ func getTLSListener(c context.Context, network string, host string, portRange st
 	lnKey := fmt.Sprintf("tailscale+tls/%s:%s:%s", host, network, port)
 
 	sharedLn, _, err := tailscaleListeners.LoadOrNew(lnKey, func() (caddy.Destructor, error) {
-		ln, err := node.Server.Listen(network, ":"+port)
+		ln, err := node.Listen(network, ":"+port)
 		if err != nil {
 			return nil, err
 		}
@@ -221,7 +221,7 @@ func getUDPListener(c context.Context, network string, host string, portRange st
 			return nil, fmt.Errorf("no suitable Tailscale IP address found for UDP listener")
 		}
 
-		pc, err := node.Server.ListenPacket(network, ap.String())
+		pc, err := node.ListenPacket(network, ap.String())
 		if err != nil {
 			return nil, err
 		}
@@ -441,7 +441,7 @@ type tailscaleSharedListener struct {
 }
 
 func (tsl *tailscaleSharedListener) Destruct() error {
-	return tsl.Listener.Close()
+	return tsl.Close()
 }
 
 // tailscaleFakeCloseListener is similar to Caddy's fakeCloseListener
@@ -468,13 +468,13 @@ func (tfcl *tailscaleFakeCloseListener) Accept() (net.Conn, error) {
 func (tfcl *tailscaleFakeCloseListener) Close() error {
 	if tfcl.closed.CompareAndSwap(false, true) {
 		_, _ = tailscaleListeners.Delete(tfcl.key)
-		tfcl.node.Close()
+		return tfcl.node.Close()
 	}
 	return nil
 }
 
 func (tfcl *tailscaleFakeCloseListener) Unwrap() net.Listener {
-	return tfcl.tailscaleSharedListener.Listener
+	return tfcl.Listener
 }
 
 // tailscaleSharedPacketConn is similar to tailscaleSharedListener but for packet connections
@@ -484,7 +484,7 @@ type tailscaleSharedPacketConn struct {
 }
 
 func (tspc *tailscaleSharedPacketConn) Destruct() error {
-	return tspc.PacketConn.Close()
+	return tspc.Close()
 }
 
 // tailscaleFakeClosePacketConn is similar to tailscaleFakeCloseListener but for packet connections
@@ -511,13 +511,13 @@ func (tfcpc *tailscaleFakeClosePacketConn) ReadFrom(p []byte) (n int, addr net.A
 func (tfcpc *tailscaleFakeClosePacketConn) Close() error {
 	if tfcpc.closed.CompareAndSwap(false, true) {
 		_, _ = tailscaleListeners.Delete(tfcpc.key)
-		tfcpc.node.Close()
+		return tfcpc.node.Close()
 	}
 	return nil
 }
 
 func (tfcpc *tailscaleFakeClosePacketConn) Unwrap() net.PacketConn {
-	return tfcpc.tailscaleSharedPacketConn.PacketConn
+	return tfcpc.PacketConn
 }
 
 // tsnetMuxTransport is an [http.RoundTripper] that sends requests to the LocalAPI
@@ -562,9 +562,9 @@ func (t *tsnetMuxTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return rt.RoundTrip(req)
 }
 
-// localAPITransport is an [http.RoundTripper] that sends requests to a [tailscale.LocalClient]'s LocalAPI.
+// localAPITransport is an [http.RoundTripper] that sends requests to a [local.Client]'s LocalAPI.
 type localAPITransport struct {
-	*tailscale.LocalClient
+	*local.Client
 }
 
 func (t *localAPITransport) RoundTrip(req *http.Request) (*http.Response, error) {

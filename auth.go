@@ -1,4 +1,4 @@
-// Copyright (c) Tailscale Inc & AUTHORS
+// Copyright (c) Tailscale Inc & contributors
 // SPDX-License-Identifier: Apache-2.0
 
 package tscaddy
@@ -17,7 +17,7 @@ import (
 	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp/caddyauth"
-	"tailscale.com/client/tailscale"
+	"tailscale.com/client/local"
 	"tailscale.com/tsnet"
 )
 
@@ -32,7 +32,7 @@ func init() {
 // that node will be used to identify the user information for inbound requests.
 // Otherwise, it will attempt to find and use the local tailscaled daemon running on the system.
 type Auth struct {
-	localclient *tailscale.LocalClient
+	localclient *local.Client
 }
 
 func (Auth) CaddyModule() caddy.ModuleInfo {
@@ -65,7 +65,7 @@ func findTsnetListener(ln net.Listener) (_ tsnetListener, ok bool) {
 
 	// if ln has an embedded net.Listener field, unwrap it.
 	s := reflect.ValueOf(ln)
-	if s.Kind() == reflect.Ptr {
+	if s.Kind() == reflect.Pointer {
 		s = s.Elem()
 	}
 	if s.Kind() != reflect.Struct {
@@ -93,7 +93,7 @@ type wrappedListener interface {
 // client returns the tailscale LocalClient for the TailscaleAuth module.
 // If the LocalClient has not already been configured, the provided request will be used to
 // lookup the tailscale node that serviced the request, and get the associated LocalClient.
-func (ta *Auth) client(r *http.Request) (*tailscale.LocalClient, error) {
+func (ta *Auth) client(r *http.Request) (*local.Client, error) {
 	if ta.localclient != nil {
 		return ta.localclient, nil
 	}
@@ -113,7 +113,7 @@ func (ta *Auth) client(r *http.Request) (*tailscale.LocalClient, error) {
 
 	if ta.localclient == nil {
 		// default to empty client that will talk to local tailscaled
-		ta.localclient = new(tailscale.LocalClient)
+		ta.localclient = new(local.Client)
 	}
 
 	return ta.localclient, nil
