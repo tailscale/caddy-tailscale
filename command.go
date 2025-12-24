@@ -1,5 +1,5 @@
 // Copyright 2015 Matthew Holt and The Caddy Authors
-// Copyright (c) Tailscale Inc & AUTHORS
+// Copyright (c) Tailscale Inc & contributors
 // SPDX-License-Identifier: Apache-2.0
 
 package tscaddy
@@ -109,9 +109,10 @@ func cmdTailscaleProxy(fs caddycmd.Flags) (int, error) {
 		}
 	}
 	if fromAddr.Port == "" {
-		if fromAddr.Scheme == "http" {
+		switch fromAddr.Scheme {
+		case "http":
 			fromAddr.Port = httpPort
-		} else if fromAddr.Scheme == "https" {
+		case "https":
 			fromAddr.Port = httpsPort
 		}
 	}
