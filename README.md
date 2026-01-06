@@ -199,8 +199,11 @@ To customize logging level or output, use the [log global option]:
 
 ## Network listener
 
+> [!TIP]
+> If you prefer to use Tailscale by default for all sites you can use the [`default_bind`] global option, instead of `bind` in each site.
+
 The provided network listener allows privately serving sites on your tailnet.
-Configure a site block as usual, and use the [bind] directive to specify a tailscale network address:
+Configure a site block as usual, and use the [`bind`] directive to specify a tailscale network address:
 
 ```caddyfile
 :80 {
@@ -269,7 +272,8 @@ Or they can be served on different ports of the same Tailscale node:
 }
 ```
 
-[bind]: https://caddyserver.com/docs/caddyfile/directives/bind
+[`bind`]: https://caddyserver.com/docs/caddyfile/directives/bind
+[`default_bind`]: https://caddyserver.com/docs/caddyfile/options#default-bind
 
 ### HTTPS support
 
