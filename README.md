@@ -66,7 +66,7 @@ caddy-tailscale includes a Dockerfile for building a Caddy image with the plugin
 This can be built manually, or you can use the pre-built image with:
 
 ```sh
-docker run -it --rm ghcr.io/tailscale/caddy-tailscale
+docker run -it --rm ghcr.io/tailscale/caddy-tailscale:main
 ```
 
 Mount a custom Caddyfile to `/etc/caddy/Caddyfile` and optionally mount a volume
@@ -76,7 +76,7 @@ to `/config` to persist the default Tailscale state directory:
 docker run -it --rm \
   -e TS_AUTHKEY="tskey-auth-XXX" \
   -v ./custom.caddyfile:/etc/caddy/Caddyfile -v ./config:config \
-  ghcr.io/tailscale/caddy-tailscale
+  ghcr.io/tailscale/caddy-tailscale:main
 ```
 
 ## Configuration
