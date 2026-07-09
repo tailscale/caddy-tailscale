@@ -6,6 +6,7 @@ package tscaddy
 // auth.go contains the TailscaleAuth module and supporting logic.
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp/caddyauth"
 	"tailscale.com/client/local"
+	"tailscale.com/tailcfg"
 	"tailscale.com/tsnet"
 )
 
@@ -132,6 +134,7 @@ type tsnetListener interface {
 //   - tailscale_name: the user's display name
 //   - tailscale_profile_picture: the user's profile picture URL
 //   - tailscale_tailnet: the user's tailnet name (if the user is not connecting to a shared node)
+//   - tailscale_grants: JSON string of the peer's granted capabilities (if any)
 func (ta Auth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.User, bool, error) {
 	user := caddyauth.User{}
 
@@ -156,6 +159,31 @@ func (ta Auth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.U
 		}
 	}
 
+	// Extract grants from CapMap
+	grants := extractGrants(info.CapMap)
+
+	// Register replacer mapping for {tailscale.grants}
+	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	repl.Map(func(key string) (any, bool) {
+		if key == "tailscale.grants" {
+			if len(grants) == 0 {
+				// Return empty map so CEL operations like "in" work without "no such overload"
+				return map[string]any{}, true
+			}
+			return grants, true
+		}
+		return nil, false
+	})
+
+	// Marshal grants to JSON for metadata
+	var grantsJSON string
+	if len(grants) > 0 {
+		b, err := json.Marshal(grants)
+		if err == nil {
+			grantsJSON = string(b)
+		}
+	}
+
 	user.ID = info.UserProfile.LoginName
 	user.Metadata = map[string]string{
 		"tailscale_login":           strings.Split(info.UserProfile.LoginName, "@")[0],
@@ -163,8 +191,37 @@ func (ta Auth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.U
 		"tailscale_name":            info.UserProfile.DisplayName,
 		"tailscale_profile_picture": info.UserProfile.ProfilePicURL,
 		"tailscale_tailnet":         tailnet,
+		"tailscale_grants":          grantsJSON,
 	}
 	return user, true, nil
+}
+
+// extractGrants filters the CapMap based on acceptAppCaps and returns a map suitable for JSON marshaling.
+// If acceptAppCaps is empty, all capabilities are included.
+func extractGrants(capMap tailcfg.PeerCapMap) map[string]any {
+	if len(capMap) == 0 {
+		return nil
+	}
+
+	grants := make(map[string]any)
+
+	for cap, vals := range capMap {
+		var parsed []any
+		for _, v := range vals {
+			var obj any
+			if err := json.Unmarshal([]byte(v), &obj); err == nil {
+				parsed = append(parsed, obj)
+			} else {
+				parsed = append(parsed, string(v))
+			}
+		}
+		grants[string(cap)] = parsed
+	}
+
+	if len(grants) == 0 {
+		return nil
+	}
+	return grants
 }
 
 func parseAuthConfig(_ httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {

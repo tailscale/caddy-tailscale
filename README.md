@@ -329,25 +329,53 @@ The following fields are set on the Caddy user object:
 - `user.tailscale_name`: the display name of the Tailscale user
 - `user.tailscale_profile_picture`: the URL of the Tailscale user's profile picture
 - `user.tailscale_tailnet`: the name of the Tailscale network the user is a member of
+- `user.tailscale_grants`: JSON string of the peer's granted [application capabilities](#application-capabilities), if any
 
 These values can be mapped to HTTP headers that are then passed to
 an application that supports proxy authentication such as [Gitea] or [Grafana].
-You might have something like the following in your Caddyfile:
 
-```caddyfile
-:80 {
-  bind tailscale/gitea
-  tailscale_auth
-  reverse_proxy http://localhost:3000 {
-    header_up X-Webauth-User {http.auth.user.tailscale_login}
-    header_up X-Webauth-Email {http.auth.user.tailscale_user}
-    header_up X-Webauth-Name {http.auth.user.tailscale_name}
+When used with a Tailscale listener (described above), that Tailscale node is used to identify the remote user.
+Otherwise, the authentication provider will attempt to connect to the Tailscale daemon running on the local machine.
+
+## Application Capabilities
+
+[Tailscale application capabilities](https://tailscale.com/kb/1537/grants-app-capabilities) (grants) allow you to pass
+application-specific data defined in your Tailscale ACL policy file to your Caddy site.
+These are exposed through the `{tailscale.grants}` [Caddy placeholder](https://caddyserver.com/docs/conventions#placeholders)
+for use in [CEL expression matchers](https://caddyserver.com/docs/caddyfile/matchers#expression).
+
+For example, given the following grant in your Tailscale ACL policy:
+
+```json
+{
+  "src": "autogroup:admins",
+  "dst": "tag:caddy",
+  "app": {
+    "example.com/app": [
+      { "admin": true }
+    ]
   }
 }
 ```
 
-When used with a Tailscale listener (described above), that Tailscale node is used to identify the remote user.
-Otherwise, the authentication provider will attempt to connect to the Tailscale daemon running on the local machine.
+You can route requests based on grant values in a Caddyfile:
+
+```caddyfile
+handle /admin {
+    @admin expression `{tailscale.grants}["example.com/app"][0].admin == true`
+    respond @admin "Welcome admin"
+    respond "not authorized" 401
+}
+```
+
+Or forward the grants to a backend application using the user metadata:
+
+```caddyfile
+reverse_proxy localhost:3000 {
+    header_up X-Tailscale-User {http.auth.user.tailscale_login}
+    header_up X-Tailscale-App-Caps {http.auth.user.tailscale_grants}
+}
+```
 
 [tagged devices]: https://tailscale.com/kb/1068/acl-tags
 [Gitea]: https://docs.gitea.com/usage/authentication#reverse-proxy
