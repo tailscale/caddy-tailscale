@@ -24,10 +24,12 @@ import (
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/caddyserver/certmagic"
+	proxyproto "github.com/pires/go-proxyproto"
 	"github.com/tailscale/tscert"
 	"go.uber.org/zap"
 	"tailscale.com/client/local"
 	"tailscale.com/hostinfo"
+	"tailscale.com/tailcfg"
 	"tailscale.com/tsnet"
 )
 
@@ -45,11 +47,25 @@ func init() {
 	hostinfo.SetApp("caddy")
 }
 
+// parseServiceBind splits a bind host into a node name and optional service name.
+// The format is "nodename+servicelabel", where the "+..." suffix is optional.
+// For example, "app+plex" returns ("app", "svc:plex") and "app" returns ("app", "").
+func parseServiceBind(host string) (nodeName string, serviceName tailcfg.ServiceName) {
+	nodeName, svcLabel, ok := strings.Cut(host, "+")
+	if ok && svcLabel != "" {
+		return nodeName, tailcfg.ServiceName("svc:" + svcLabel)
+	}
+	return host, ""
+}
+
 func getTCPListener(c context.Context, network string, host string, portRange string, portOffset uint, _ net.ListenConfig) (any, error) {
 	ctx, ok := c.(caddy.Context)
 	if !ok {
 		return nil, fmt.Errorf("context is not a caddy.Context: %T", c)
 	}
+
+	nodeName, svcName := parseServiceBind(host)
+	host = nodeName
 
 	na, err := caddy.ParseNetworkAddress(caddy.JoinNetworkAddress(network, host, portRange))
 	if err != nil {
@@ -73,12 +89,39 @@ func getTCPListener(c context.Context, network string, host string, portRange st
 	}
 
 	// Follow Caddy's standard listener pooling mechanism
-	lnKey := fmt.Sprintf("tailscale/%s:%s:%s", host, network, port)
+	lnKey := "tailscale/" + host
+	if svcName != "" {
+		lnKey += "+" + string(svcName)
+	}
+	lnKey += ":" + network + ":" + port
 
 	sharedLn, _, err := tailscaleListeners.LoadOrNew(lnKey, func() (caddy.Destructor, error) {
-		ln, err := node.Listen(network, ":"+port)
-		if err != nil {
-			return nil, err
+		var ln net.Listener
+		if svcName != "" {
+			portNum, err := strconv.ParseUint(port, 10, 16)
+			if err != nil {
+				return nil, fmt.Errorf("invalid port %q: %w", port, err)
+			}
+			// Advertise the Service with PROXY protocol so the original
+			// client IP survives the loopback hop that tsnet uses to forward
+			// Service connections. Without this, connections arrive from
+			// 127.0.0.1 and Caddy reports that as the client address.
+			sl, err := node.ListenService(string(svcName), tsnet.ServiceModeTCP{
+				Port:                 uint16(portNum),
+				PROXYProtocolVersion: 2,
+			})
+			if err != nil {
+				return nil, err
+			}
+			// Strip and parse the PROXY protocol header so the accepted
+			// connection's RemoteAddr reflects the real client IP.
+			ln = &proxyproto.Listener{Listener: sl}
+		} else {
+			var err error
+			ln, err = node.Listen(network, ":"+port)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		return &tailscaleSharedListener{
@@ -102,6 +145,9 @@ func getTLSListener(c context.Context, network string, host string, portRange st
 		return nil, fmt.Errorf("context is not a caddy.Context: %T", c)
 	}
 
+	nodeName, svcName := parseServiceBind(host)
+	host = nodeName
+
 	na, err := caddy.ParseNetworkAddress(caddy.JoinNetworkAddress(network, host, portRange))
 	if err != nil {
 		return nil, err
@@ -124,21 +170,50 @@ func getTLSListener(c context.Context, network string, host string, portRange st
 	}
 
 	// Follow Caddy's standard listener pooling mechanism
-	lnKey := fmt.Sprintf("tailscale+tls/%s:%s:%s", host, network, port)
+	lnKey := "tailscale+tls/" + host
+	if svcName != "" {
+		lnKey += "+" + string(svcName)
+	}
+	lnKey += ":" + network + ":" + port
 
 	sharedLn, _, err := tailscaleListeners.LoadOrNew(lnKey, func() (caddy.Destructor, error) {
-		ln, err := node.Listen(network, ":"+port)
-		if err != nil {
-			return nil, err
+		var ln net.Listener
+		if svcName != "" {
+			portNum, err := strconv.ParseUint(port, 10, 16)
+			if err != nil {
+				return nil, fmt.Errorf("invalid port %q: %w", port, err)
+			}
+			// Advertise the Service with PROXY protocol so the original
+			// client IP survives the loopback hop that tsnet uses to forward
+			// Service connections. Without this, connections arrive from
+			// 127.0.0.1 and Caddy reports that as the client address.
+			sl, err := node.ListenService(string(svcName), tsnet.ServiceModeTCP{
+				Port:                 uint16(portNum),
+				PROXYProtocolVersion: 2,
+			})
+			if err != nil {
+				return nil, err
+			}
+			// Strip and parse the PROXY protocol header so the accepted
+			// connection's RemoteAddr reflects the real client IP. The
+			// header precedes any TLS bytes, so this must wrap the raw
+			// Service listener.
+			ln = &proxyproto.Listener{Listener: sl}
+		} else {
+			var err error
+			ln, err = node.Listen(network, ":"+port)
+			if err != nil {
+				return nil, err
+			}
+
+			localClient, _ := node.LocalClient()
+			ln = tls.NewListener(ln, &tls.Config{
+				GetCertificate: localClient.GetCertificate,
+			})
 		}
 
-		localClient, _ := node.LocalClient()
-		tlsLn := tls.NewListener(ln, &tls.Config{
-			GetCertificate: localClient.GetCertificate,
-		})
-
 		return &tailscaleSharedListener{
-			Listener: tlsLn,
+			Listener: ln,
 			key:      lnKey,
 		}, nil
 	})
@@ -157,6 +232,11 @@ func getUDPListener(c context.Context, network string, host string, portRange st
 	if !ok {
 		return nil, fmt.Errorf("context is not a caddy.Context: %T", c)
 	}
+
+	// Strip any service suffix from the host (e.g. "app+plex" -> "app")
+	// so we can find the correct node. UDP service listeners are not yet
+	// supported, so we always use a plain ListenPacket on the node.
+	host, _, _ = strings.Cut(host, "+")
 
 	na, err := caddy.ParseNetworkAddress(caddy.JoinNetworkAddress(network, host, portRange))
 	if err != nil {
