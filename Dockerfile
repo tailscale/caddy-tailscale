@@ -1,11 +1,11 @@
-ARG GO_VERSION=1.25
+ARG GO_VERSION=1.26
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS build
 
 WORKDIR /work
 
 # Install git so that go build populates the VCS details in build info, which
 # is then reported to Tailscale in the node version string.
-RUN apk --no-cache add git=2.52.0-r0
+RUN apk --no-cache add git=2.54.0-r0
 
 COPY go.mod go.sum ./
 RUN go mod download
