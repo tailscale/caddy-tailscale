@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
@@ -22,7 +23,7 @@ import (
 )
 
 func init() {
-	caddy.RegisterModule(Auth{})
+	caddy.RegisterModule(new(Auth))
 	httpcaddyfile.RegisterHandlerDirective("tailscale_auth", parseAuthConfig)
 	httpcaddyfile.RegisterDirectiveOrder("tailscale_auth", httpcaddyfile.After, "basicauth")
 }
@@ -32,10 +33,13 @@ func init() {
 // that node will be used to identify the user information for inbound requests.
 // Otherwise, it will attempt to find and use the local tailscaled daemon running on the system.
 type Auth struct {
+	// mu guards localclient. Authenticate runs concurrently across requests,
+	// so the lazy fill in client() would otherwise be a data race.
+	mu          sync.Mutex
 	localclient *local.Client
 }
 
-func (Auth) CaddyModule() caddy.ModuleInfo {
+func (*Auth) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "http.authentication.providers.tailscale",
 		New: func() caddy.Module { return new(Auth) },
@@ -94,6 +98,9 @@ type wrappedListener interface {
 // If the LocalClient has not already been configured, the provided request will be used to
 // lookup the tailscale node that serviced the request, and get the associated LocalClient.
 func (ta *Auth) client(r *http.Request) (*local.Client, error) {
+	ta.mu.Lock()
+	defer ta.mu.Unlock()
+
 	if ta.localclient != nil {
 		return ta.localclient, nil
 	}
@@ -132,7 +139,7 @@ type tsnetListener interface {
 //   - tailscale_name: the user's display name
 //   - tailscale_profile_picture: the user's profile picture URL
 //   - tailscale_tailnet: the user's tailnet name (if the user is not connecting to a shared node)
-func (ta Auth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.User, bool, error) {
+func (ta *Auth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.User, bool, error) {
 	user := caddyauth.User{}
 
 	client, err := ta.client(r)
@@ -168,7 +175,7 @@ func (ta Auth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.U
 }
 
 func parseAuthConfig(_ httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
-	var ta Auth
+	ta := new(Auth)
 
 	return caddyauth.Authentication{
 		ProvidersRaw: caddy.ModuleMap{
