@@ -6,7 +6,6 @@ package tscaddy
 // auth.go contains the TailscaleAuth module and supporting logic.
 
 import (
-	"fmt"
 	"net"
 	"net/http"
 	"reflect"
@@ -126,12 +125,18 @@ type tsnetListener interface {
 
 // Authenticate authenticates the request and sets Tailscale user data on the caddy User object.
 //
-// This method will set the following user metadata:
+// For regular (non-tagged) users, the following metadata is set:
 //   - tailscale_login: the user's login name without the domain
 //   - tailscale_user: the user's full login name
 //   - tailscale_name: the user's display name
 //   - tailscale_profile_picture: the user's profile picture URL
-//   - tailscale_tailnet: the user's tailnet name (if the user is not connecting to a shared node)
+//   - tailscale_tailnet: the user's tailnet name
+//
+// For tagged nodes, the following metadata is set:
+//   - tailscale_tags: comma-separated list of node tags (e.g. "tag:zergbot,tag:ci")
+//   - tailscale_tailnet: the tailnet name
+//
+// The user ID is set to the login name for regular users, or the first tag for tagged nodes.
 func (ta Auth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.User, bool, error) {
 	user := caddyauth.User{}
 
@@ -145,10 +150,6 @@ func (ta Auth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.U
 		return user, false, err
 	}
 
-	if len(info.Node.Tags) != 0 {
-		return user, false, fmt.Errorf("node %s has tags", info.Node.Hostinfo.Hostname())
-	}
-
 	var tailnet string
 	if !info.Node.Hostinfo.ShareeNode() {
 		if s, found := strings.CutPrefix(info.Node.Name, info.Node.ComputedName+"."); found {
@@ -156,14 +157,26 @@ func (ta Auth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.U
 		}
 	}
 
-	user.ID = info.UserProfile.LoginName
-	user.Metadata = map[string]string{
-		"tailscale_login":           strings.Split(info.UserProfile.LoginName, "@")[0],
-		"tailscale_user":            info.UserProfile.LoginName,
-		"tailscale_name":            info.UserProfile.DisplayName,
-		"tailscale_profile_picture": info.UserProfile.ProfilePicURL,
-		"tailscale_tailnet":         tailnet,
+	if len(info.Node.Tags) != 0 {
+		// Tagged node: expose tags as metadata for Caddy expression matching.
+		// user.ID is set to the first tag for convenient @matcher expressions.
+		user.ID = info.Node.Tags[0]
+		user.Metadata = map[string]string{
+			"tailscale_tags":    strings.Join(info.Node.Tags, ","),
+			"tailscale_tailnet": tailnet,
+		}
+	} else {
+		user.ID = info.UserProfile.LoginName
+		user.Metadata = map[string]string{
+			"tailscale_login":           strings.Split(info.UserProfile.LoginName, "@")[0],
+			"tailscale_user":            info.UserProfile.LoginName,
+			"tailscale_name":            info.UserProfile.DisplayName,
+			"tailscale_profile_picture": info.UserProfile.ProfilePicURL,
+			"tailscale_tailnet":         tailnet,
+			"tailscale_tags":            "",
+		}
 	}
+
 	return user, true, nil
 }
 
