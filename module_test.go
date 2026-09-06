@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/caddyserver/caddy/v2"
+	"tailscale.com/tsnet"
 	"tailscale.com/types/opt"
 	"tailscale.com/util/must"
 )
@@ -462,4 +463,47 @@ func Test_Listen(t *testing.T) {
 	if exists && count != 0 {
 		t.Fatalf("expected 0 node references after close, got count=%d exists=%v", count, exists)
 	}
+}
+
+// Test_NodeNeverStarted covers the accessors that a node which was configured but never started
+// has to survive.
+//
+// A node held only by the reverse proxy transport is not started until the first request goes
+// through it, so a configuration that names one and then stops naming it — or simply shuts down —
+// releases a tsnet.Server that never came up. tsnet.Server.Close is documented as unsafe before
+// Start and panics there, which took the process with it.
+func Test_NodeNeverStarted(t *testing.T) {
+	newNode := func(t *testing.T) *tailscaleNode {
+		t.Helper()
+		return &tailscaleNode{Server: &tsnet.Server{
+			Dir:      t.TempDir(),
+			Hostname: "never-started",
+		}}
+	}
+
+	t.Run("Destruct", func(t *testing.T) {
+		// Caddy calls this when the last reference to the node goes away: after the reload that
+		// stopped using it, and again on shutdown.
+		if err := newNode(t).Destruct(); err != nil {
+			t.Errorf("Destruct() = %v, want nil", err)
+		}
+	})
+
+	t.Run("Destruct twice", func(t *testing.T) {
+		node := newNode(t)
+		if err := node.Destruct(); err != nil {
+			t.Fatalf("first Destruct() = %v, want nil", err)
+		}
+		if err := node.Destruct(); err != nil {
+			t.Errorf("second Destruct() = %v, want nil", err)
+		}
+	})
+
+	t.Run("CertDomains", func(t *testing.T) {
+		// tsnetMuxTransport.RoundTrip calls this on every node in the pool for each TLS
+		// handshake, so one unused node would otherwise break certificates for all of them.
+		if got := newNode(t).CertDomains(); got != nil {
+			t.Errorf("CertDomains() = %v, want nil", got)
+		}
+	})
 }
