@@ -28,6 +28,7 @@ import (
 	"go.uber.org/zap"
 	"tailscale.com/client/local"
 	"tailscale.com/hostinfo"
+	"tailscale.com/ipn/ipnstate"
 	"tailscale.com/tsnet"
 )
 
@@ -295,9 +296,7 @@ func getNode(ctx caddy.Context, name string) (*tailscaleNode, error) {
 			return nil, err
 		}
 
-		return &tailscaleNode{
-			s,
-		}, nil
+		return &tailscaleNode{Server: s}, nil
 	})
 	if err != nil {
 		return nil, err
@@ -415,10 +414,101 @@ func getTags(name string, app *App) []string {
 // This node can listen on the tailscale network interface, or be used to connect to other nodes in the tailnet.
 type tailscaleNode struct {
 	*tsnet.Server
+
+	// running reports whether tsnet.Server.Start has returned successfully for this node.
+	//
+	// Not every node is started when it is created. A node created for the reverse proxy
+	// transport is only started when the first request is sent through it, so a node that was
+	// configured but never used has no tsnet state at all. Several tsnet.Server methods are
+	// documented as safe in that state but are not, so the wrappers below record when the
+	// server has actually come up and the accessors that would crash consult it.
+	running atomic.Bool
 }
 
-func (t tailscaleNode) Destruct() error {
-	return t.Close()
+// start brings tsnet up and records whether it succeeded.
+//
+// tsnet.Server.Start is idempotent (it is guarded by a sync.Once), so this is safe to call on
+// every use. Only a nil error sets running: when Start fails there is no way to tell from the
+// outside how far initialization got, and treating a half-built server as running would put us
+// back where we started.
+func (t *tailscaleNode) start() error {
+	err := t.Server.Start()
+	if err == nil {
+		t.running.Store(true)
+	}
+	return err
+}
+
+// Listen starts the node, then listens on the tailnet.
+//
+// tsnet.Server.Listen starts the server itself, so this only exists to record that it happened.
+func (t *tailscaleNode) Listen(network, addr string) (net.Listener, error) {
+	if err := t.start(); err != nil {
+		return nil, err
+	}
+	return t.Server.Listen(network, addr)
+}
+
+// ListenPacket starts the node, then listens on the tailnet. See Listen.
+func (t *tailscaleNode) ListenPacket(network, addr string) (net.PacketConn, error) {
+	if err := t.start(); err != nil {
+		return nil, err
+	}
+	return t.Server.ListenPacket(network, addr)
+}
+
+// Up starts the node and waits for it to come up. See Listen.
+func (t *tailscaleNode) Up(ctx context.Context) (*ipnstate.Status, error) {
+	if err := t.start(); err != nil {
+		return nil, err
+	}
+	return t.Server.Up(ctx)
+}
+
+// LocalClient starts the node, then returns its LocalAPI client. See Listen.
+func (t *tailscaleNode) LocalClient() (*local.Client, error) {
+	if err := t.start(); err != nil {
+		return nil, err
+	}
+	return t.Server.LocalClient()
+}
+
+// HTTPClient starts the node, then returns a client that dials over the tailnet. See Listen.
+//
+// The error is dropped to keep tsnet.Server's signature: a failure here surfaces on the first
+// request the returned client makes, which is where it did before.
+func (t *tailscaleNode) HTTPClient() *http.Client {
+	_ = t.start()
+	return t.Server.HTTPClient()
+}
+
+// CertDomains returns the domains this node can serve certificates for, or nil if it is not
+// running.
+//
+// tsnet.Server.CertDomains documents exactly that, but reads s.lb unconditionally, and s.lb is
+// only set once the server starts — so on a node that never started it panics instead of
+// returning nil. tsnetMuxTransport.RoundTrip calls this on every node in the pool for each
+// handshake, which means one unused node would take down TLS for all of them.
+func (t *tailscaleNode) CertDomains() []string {
+	if !t.running.Load() {
+		return nil
+	}
+	return t.Server.CertDomains()
+}
+
+func (t *tailscaleNode) Destruct() error {
+	// tsnet.Server.Close "must not be called before or concurrently with Start", and a node that
+	// was never started has nothing to close: Server.close ends in s.sys.Bus.Get().Close(), and
+	// s.sys is only populated by start(), so closing one panics with a nil dereference.
+	//
+	// That is reachable in normal operation. Caddy releases the previous configuration's modules
+	// after every reload and again on shutdown, so a node held only by a reverse proxy transport
+	// that never carried a request crashes the admin API on the reload that stops using it, and
+	// turns every shutdown into a panic instead of a clean exit.
+	if !t.running.Load() {
+		return nil
+	}
+	return t.Server.Close()
 }
 
 // fakeCloseNode is similar to fakeCloseListener but for node references.
