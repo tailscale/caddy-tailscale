@@ -29,6 +29,9 @@ import (
 	"tailscale.com/client/local"
 	"tailscale.com/hostinfo"
 	"tailscale.com/tsnet"
+	"tailscale.com/ipn"
+	_ "tailscale.com/ipn/store/kubestore"
+	"tailscale.com/ipn/store"
 )
 
 func init() {
@@ -291,9 +294,20 @@ func getNode(ctx caddy.Context, name string) (*tailscaleNode, error) {
 		if s.Dir, err = getStateDir(name, app); err != nil {
 			return nil, err
 		}
-		if err := os.MkdirAll(s.Dir, 0700); err != nil {
-			return nil, err
+		
+		var stateStore ipn.StateStore
+		if !store.HasKnownProviderPrefix(s.Dir) {
+			if err := os.MkdirAll(s.Dir, 0700); err != nil {
+				return nil, err
+			}
+		} else {
+			stateStore, err = store.New(app.logger.Sugar().Infof, s.Dir)
+			if err != nil {
+				return nil, err
+			}
+			s.Dir = "" // Clear Dir so tsnet uses default confDir for log.conf
 		}
+		s.Store = stateStore
 
 		return &tailscaleNode{
 			s,
@@ -380,6 +394,12 @@ func getStateDir(name string, app *App) (string, error) {
 		s, err := repl.ReplaceOrErr(app.StateDir, true, true)
 		if err != nil {
 			return "", err
+		}
+		if store.HasKnownProviderPrefix(s) {
+			if name != "" {
+				return s + "-" + name, nil
+			}
+			return s, nil
 		}
 		return filepath.Join(s, name), nil
 	}

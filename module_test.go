@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"tailscale.com/tsnet"
+	"tailscale.com/types/logger"
 
 	"github.com/caddyserver/caddy/v2"
 	"tailscale.com/types/opt"
@@ -461,5 +463,53 @@ func Test_Listen(t *testing.T) {
 	count, exists = nodes.References("testhost")
 	if exists && count != 0 {
 		t.Fatalf("expected 0 node references after close, got count=%d exists=%v", count, exists)
+	}
+}
+
+func Test_setupStateStore(t *testing.T) {
+	tests := []struct {
+		name    string
+		dir     string
+		wantErr bool
+		wantDir string
+	}{
+		{
+			name:    "known prefix mem clears dir and sets store",
+			dir:     "mem:test",
+			wantErr: false,
+			wantDir: "",
+		},
+		{
+			name:    "local filesystem path does not clear dir",
+			dir:     t.TempDir() + "/test-dir",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &tsnet.Server{Dir: tt.dir}
+			
+			wantDir := tt.wantDir
+			if tt.name == "local filesystem path does not clear dir" {
+				wantDir = tt.dir
+			}
+
+			err := setupStateStore(s, tt.dir, logger.Discard)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("setupStateStore() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			if s.Dir != wantDir {
+				t.Errorf("setupStateStore() s.Dir = %v, want %v", s.Dir, wantDir)
+			}
+
+			if tt.name == "known prefix mem clears dir and sets store" && s.Store == nil {
+				t.Errorf("setupStateStore() s.Store was nil for known prefix")
+			}
+			if tt.name == "local filesystem path does not clear dir" && s.Store != nil {
+				t.Errorf("setupStateStore() s.Store was not nil for filesystem path")
+			}
+		})
 	}
 }
