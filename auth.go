@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
@@ -33,6 +34,7 @@ func init() {
 // Otherwise, it will attempt to find and use the local tailscaled daemon running on the system.
 type Auth struct {
 	localclient *local.Client
+	clientMu    sync.Mutex
 }
 
 func (Auth) CaddyModule() caddy.ModuleInfo {
@@ -94,12 +96,13 @@ type wrappedListener interface {
 // If the LocalClient has not already been configured, the provided request will be used to
 // lookup the tailscale node that serviced the request, and get the associated LocalClient.
 func (ta *Auth) client(r *http.Request) (*local.Client, error) {
+	ta.clientMu.Lock()
+	defer ta.clientMu.Unlock()
 	if ta.localclient != nil {
 		return ta.localclient, nil
 	}
 
-	// if request was made through a tsnet listener, set up the client for the associated tsnet
-	// server.
+	// If the request was made through a tsnet listener, use its local client.
 	server := r.Context().Value(caddyhttp.ServerCtxKey).(*caddyhttp.Server)
 	for _, listener := range server.Listeners() {
 		if tsl, ok := findTsnetListener(listener); ok {
@@ -112,7 +115,7 @@ func (ta *Auth) client(r *http.Request) (*local.Client, error) {
 	}
 
 	if ta.localclient == nil {
-		// default to empty client that will talk to local tailscaled
+		// Default to a client that talks to the local tailscaled.
 		ta.localclient = new(local.Client)
 	}
 
@@ -132,7 +135,7 @@ type tsnetListener interface {
 //   - tailscale_name: the user's display name
 //   - tailscale_profile_picture: the user's profile picture URL
 //   - tailscale_tailnet: the user's tailnet name (if the user is not connecting to a shared node)
-func (ta Auth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.User, bool, error) {
+func (ta *Auth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.User, bool, error) {
 	user := caddyauth.User{}
 
 	client, err := ta.client(r)
