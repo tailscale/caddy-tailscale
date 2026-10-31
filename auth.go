@@ -90,6 +90,11 @@ type wrappedListener interface {
 	Unwrap() net.Listener
 }
 
+// systemLocalClient talks to the local tailscaled on behalf of every Auth. Caddy
+// builds new modules on each config load and a local.Client cannot close its idle
+// connections, so a client per Auth would strand a connection pool at each reload.
+var systemLocalClient = new(local.Client)
+
 // client returns the tailscale LocalClient for the TailscaleAuth module.
 // If the LocalClient has not already been configured, the provided request will be used to
 // lookup the tailscale node that serviced the request, and get the associated LocalClient.
@@ -112,8 +117,8 @@ func (ta *Auth) client(r *http.Request) (*local.Client, error) {
 	}
 
 	if ta.localclient == nil {
-		// default to empty client that will talk to local tailscaled
-		ta.localclient = new(local.Client)
+		// default to the shared client that will talk to local tailscaled
+		ta.localclient = systemLocalClient
 	}
 
 	return ta.localclient, nil
