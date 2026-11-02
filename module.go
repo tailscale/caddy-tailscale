@@ -82,7 +82,7 @@ func getTCPListener(c context.Context, network string, host string, portRange st
 		}
 
 		return &tailscaleSharedListener{
-			Listener: ln,
+			Listener: &addressCachingListener{Listener: ln},
 			key:      lnKey,
 		}, nil
 	})
@@ -133,9 +133,12 @@ func getTLSListener(c context.Context, network string, host string, portRange st
 		}
 
 		localClient, _ := node.LocalClient()
-		tlsLn := tls.NewListener(ln, &tls.Config{
-			GetCertificate: localClient.GetCertificate,
-		})
+		tlsLn := tls.NewListener(
+			&addressCachingListener{Listener: ln},
+			&tls.Config{
+				GetCertificate: localClient.GetCertificate,
+			},
+		)
 
 		return &tailscaleSharedListener{
 			Listener: tlsLn,
