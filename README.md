@@ -333,6 +333,19 @@ The following fields are set on the Caddy user object:
 
 These values can be mapped to HTTP headers that are then passed to
 an application that supports proxy authentication such as [Gitea] or [Grafana].
+You might have something like the following in your Caddyfile:
+
+```caddyfile
+:80 {
+  bind tailscale/gitea
+  tailscale_auth
+  reverse_proxy http://localhost:3000 {
+    header_up X-Webauth-User {http.auth.user.tailscale_login}
+    header_up X-Webauth-Email {http.auth.user.tailscale_user}
+    header_up X-Webauth-Name {http.auth.user.tailscale_name}
+  }
+}
+```
 
 When used with a Tailscale listener (described above), that Tailscale node is used to identify the remote user.
 Otherwise, the authentication provider will attempt to connect to the Tailscale daemon running on the local machine.
