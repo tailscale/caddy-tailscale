@@ -6,11 +6,14 @@ package tscaddy
 // auth.go contains the TailscaleAuth module and supporting logic.
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"reflect"
 	"strings"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig"
@@ -18,6 +21,7 @@ import (
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp/caddyauth"
 	"tailscale.com/client/local"
+	"tailscale.com/tailcfg"
 	"tailscale.com/tsnet"
 )
 
@@ -132,6 +136,7 @@ type tsnetListener interface {
 //   - tailscale_name: the user's display name
 //   - tailscale_profile_picture: the user's profile picture URL
 //   - tailscale_tailnet: the user's tailnet name (if the user is not connecting to a shared node)
+//   - tailscale_grants: JSON object of the peer's granted capabilities ("{}" if none)
 func (ta Auth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.User, bool, error) {
 	user := caddyauth.User{}
 
@@ -156,6 +161,13 @@ func (ta Auth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.U
 		}
 	}
 
+	// Extract grants from CapMap
+	grants := extractGrants(info.CapMap)
+
+	// Register replacer mapping for {tailscale.grants}
+	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	repl.Map(grantsReplacer(grants))
+
 	user.ID = info.UserProfile.LoginName
 	user.Metadata = map[string]string{
 		"tailscale_login":           strings.Split(info.UserProfile.LoginName, "@")[0],
@@ -163,8 +175,95 @@ func (ta Auth) Authenticate(w http.ResponseWriter, r *http.Request) (caddyauth.U
 		"tailscale_name":            info.UserProfile.DisplayName,
 		"tailscale_profile_picture": info.UserProfile.ProfilePicURL,
 		"tailscale_tailnet":         tailnet,
+		"tailscale_grants":          grants.String(),
 	}
 	return user, true, nil
+}
+
+// Grants holds a peer's application capabilities, keyed by capability name,
+// with each value being the list of that capability's parsed JSON values.
+//
+// It is a map so that CEL expressions can index into it, and implements
+// fmt.Stringer so that it renders as JSON when used in a header or other
+// string context.
+type Grants map[string]any
+
+// String returns the grants as a JSON object, matching the format of the
+// Tailscale-App-Capabilities header sent by tailscale serve. Non-ASCII
+// characters are escaped as \uXXXX so the value is safe to use as an HTTP
+// header while remaining valid JSON.
+func (g Grants) String() string {
+	if g == nil {
+		return "{}"
+	}
+	b, err := json.Marshal(map[string]any(g))
+	if err != nil {
+		return "{}"
+	}
+	return asciiJSON(b)
+}
+
+// asciiJSON escapes all non-ASCII characters in the JSON document b as
+// \uXXXX sequences. Non-ASCII bytes can only appear inside JSON strings, so
+// the result is an equivalent JSON document.
+func asciiJSON(b []byte) string {
+	var sb strings.Builder
+	sb.Grow(len(b))
+	for _, r := range string(b) {
+		switch {
+		case r < utf8.RuneSelf:
+			sb.WriteRune(r)
+		case r > 0xFFFF:
+			r1, r2 := utf16.EncodeRune(r)
+			fmt.Fprintf(&sb, `\u%04x\u%04x`, r1, r2)
+		default:
+			fmt.Fprintf(&sb, `\u%04x`, r)
+		}
+	}
+	return sb.String()
+}
+
+// grantsReplacer returns a replacer func that resolves {tailscale.grants}.
+// It always returns a non-nil Grants, so that CEL operations like "in" work
+// without "no such overload" errors and headers render as "{}".
+func grantsReplacer(grants Grants) caddy.ReplacerFunc {
+	if grants == nil {
+		grants = Grants{}
+	}
+	return func(key string) (any, bool) {
+		if key == "tailscale.grants" {
+			return grants, true
+		}
+		return nil, false
+	}
+}
+
+// extractGrants converts a PeerCapMap into Grants, parsing each capability
+// value as JSON. Values that are not valid JSON are kept as strings.
+func extractGrants(capMap tailcfg.PeerCapMap) Grants {
+	if len(capMap) == 0 {
+		return nil
+	}
+
+	grants := make(Grants)
+
+	for cap, vals := range capMap {
+		parsed := make([]any, 0, len(vals))
+		for _, v := range vals {
+			var obj any
+			if err := json.Unmarshal([]byte(v), &obj); err == nil {
+				parsed = append(parsed, obj)
+			} else {
+				parsed = append(parsed, string(v))
+			}
+		}
+		grants[string(cap)] = parsed
+	}
+
+	if len(grants) == 0 {
+		return nil
+	}
+	return grants
 }
 
 func parseAuthConfig(_ httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {

@@ -329,6 +329,7 @@ The following fields are set on the Caddy user object:
 - `user.tailscale_name`: the display name of the Tailscale user
 - `user.tailscale_profile_picture`: the URL of the Tailscale user's profile picture
 - `user.tailscale_tailnet`: the name of the Tailscale network the user is a member of
+- `user.tailscale_grants`: JSON string of the peer's granted [application capabilities](#application-capabilities), or `{}` if none
 
 These values can be mapped to HTTP headers that are then passed to
 an application that supports proxy authentication such as [Gitea] or [Grafana].
@@ -348,6 +349,70 @@ You might have something like the following in your Caddyfile:
 
 When used with a Tailscale listener (described above), that Tailscale node is used to identify the remote user.
 Otherwise, the authentication provider will attempt to connect to the Tailscale daemon running on the local machine.
+
+## Application Capabilities
+
+[Tailscale application capabilities](https://tailscale.com/kb/1537/grants-app-capabilities) (grants) allow you to pass
+application-specific data defined in your Tailscale ACL policy file to your Caddy site.
+These are exposed through the `{tailscale.grants}` [Caddy placeholder](https://caddyserver.com/docs/conventions#placeholders)
+for use in [CEL expression matchers](https://caddyserver.com/docs/caddyfile/matchers#expression).
+
+For example, given the following grant in your Tailscale ACL policy:
+
+```json
+{
+  "src": "autogroup:admins",
+  "dst": "tag:caddy",
+  "app": {
+    "example.com/app": [
+      { "admin": true }
+    ]
+  }
+}
+```
+
+You can route requests based on grant values in a Caddyfile:
+
+```caddyfile
+handle /admin {
+    @admin expression `{tailscale.grants}["example.com/app"][0].admin == true`
+    respond @admin "Welcome admin"
+    respond "not authorized" 401
+}
+```
+
+Or forward the grants to a backend application in a header:
+
+```caddyfile
+reverse_proxy localhost:3000 {
+    header_up Tailscale-User-Login {http.auth.user.tailscale_user}
+    header_up Tailscale-App-Capabilities {tailscale.grants}
+}
+```
+
+When used outside of a CEL expression, `{tailscale.grants}` (and `{http.auth.user.tailscale_grants}`)
+renders as the same JSON object that `tailscale serve` sends in its `Tailscale-App-Capabilities` header,
+mapping each capability name to an array of its values, or `{}` if the user has no grants.
+For example:
+
+```json
+{"example.com/app":[{"admin":true}]}
+```
+
+Some differences from `tailscale serve` to be aware of:
+
+- `tailscale serve` only forwards the capabilities listed in `--accept-app-caps`.
+  `{tailscale.grants}` contains all of the user's capabilities, for every application.
+- `tailscale serve` [RFC 2047] Q-encodes the header value if it contains non-ASCII characters.
+  `{tailscale.grants}` instead escapes non-ASCII characters as JSON `\uXXXX` sequences,
+  so the value is always plain ASCII and valid JSON.
+  Decoding it as RFC 2047 leaves it unchanged, so a backend written for `tailscale serve` can read it either way.
+- `tailscale serve` removes `Tailscale-*` headers sent by the client.
+  `header_up` overwrites a header sent by the client, but any route that does not pass through
+  `tailscale_auth` should remove these headers itself (for example, `header_up -Tailscale-*`),
+  or a client could forge them.
+
+[RFC 2047]: https://www.rfc-editor.org/rfc/rfc2047
 
 [tagged devices]: https://tailscale.com/kb/1068/acl-tags
 [Gitea]: https://docs.gitea.com/usage/authentication#reverse-proxy
